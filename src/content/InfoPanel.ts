@@ -75,7 +75,7 @@ export class InfoPanel {
         width: ${this.PANEL_WIDTH}px;
         background: #1a1a1a;
         border: 1px solid #333;
-        border-radius: 12px;
+        border-radius: 16px;
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
         display: none;
         flex-direction: column;
@@ -89,18 +89,26 @@ export class InfoPanel {
         display: flex;
       }
 
+      .redline-panel.details-expanded {
+        padding-bottom: 8px;
+      }
+
       /* Main content */
       .panel-main {
-        padding: 8px 8px 0 8px;
+        padding: 12px;
+      }
+
+      .redline-panel.details-expanded .panel-main {
+        padding-bottom: 8px;
       }
 
       /* Annotation input */
       .annotation-input {
         width: 100%;
-        background: #111;
-        border: 1px solid #333;
-        border-radius: 6px;
-        padding: 8px 10px;
+        background: #2a2a2a;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        padding: 10px 12px;
         color: #fff;
         font-size: 12px;
         font-family: inherit;
@@ -117,7 +125,7 @@ export class InfoPanel {
       }
 
       .annotation-input::placeholder {
-        color: #555;
+        color: #777;
       }
 
       /* Buttons row */
@@ -125,15 +133,15 @@ export class InfoPanel {
         display: flex;
         gap: 8px;
         margin-top: 8px;
-        padding: 0 0 4px 0;
+        justify-content: flex-end;
+        align-items: center;
       }
 
       .btn {
-        flex: 1;
         background: #2a2a2a;
         border: none;
         color: #ccc;
-        padding: 8px;
+        padding: 8px 12px;
         border-radius: 8px;
         font-size: 12px;
         font-weight: 500;
@@ -143,6 +151,7 @@ export class InfoPanel {
         display: flex;
         align-items: center;
         justify-content: center;
+        white-space: nowrap;
       }
 
       .btn:hover {
@@ -159,58 +168,69 @@ export class InfoPanel {
         background: #d62839;
       }
 
-      .btn .count {
-        opacity: 0.7;
-        font-size: 12px;
+      .btn {
+        position: relative;
+      }
+
+      .btn-tooltip {
+        position: absolute;
+        bottom: calc(100% + 8px);
+        left: 50%;
+        transform: translateX(-50%) translateY(4px);
+        background: #0a0a0a;
+        color: #ccc;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        white-space: nowrap;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.2s ease, transform 0.2s ease;
+        z-index: 1000;
+      }
+
+      .btn:hover .btn-tooltip {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
       }
 
       /* Details section */
       .details-toggle {
         display: flex;
         align-items: center;
-        gap: 6px;
-        width: 100%;
-        background: none;
+        background: transparent;
         border: none;
-        color: #666;
-        padding: 8px 8px;
-        font-size: 10px;
+        color: #ccc;
+        padding: 8px 12px;
+        border-radius: 8px;
+        font-size: 12px;
         font-weight: 500;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
         cursor: pointer;
         transition: all 0.15s;
+        height: 32px;
+        white-space: nowrap;
+        margin-right: auto;
       }
 
       .details-toggle:hover {
-        color: #999;
+        background: #333;
+        color: #fff;
       }
 
       .details-toggle.expanded {
-        background: #111;
-        border: 1px solid #333;
-        border-radius: 6px;
-        margin: 0 8px;
-        padding: 8px 10px;
-      }
-
-      .details-toggle .chevron {
-        transition: transform 0.15s;
-        font-size: 8px;
-      }
-
-      .details-toggle.expanded .chevron {
-        transform: rotate(90deg);
+        background: #333;
+        color: #fff;
       }
 
       .details-content {
         display: none;
         padding: 8px;
-        background: #0f0f0f;
-        margin: 4px 8px 8px 8px;
+        background: #2a2a2a;
+        margin: 4px 12px 4px 12px;
         border-radius: 6px;
         max-height: 200px;
         overflow-y: auto;
+        box-sizing: border-box;
       }
 
       .details-content::-webkit-scrollbar {
@@ -227,64 +247,26 @@ export class InfoPanel {
         display: block;
       }
 
-      .details-content::-webkit-scrollbar {
-        width: 4px;
-      }
-
-      .details-content::-webkit-scrollbar-thumb {
-        background: #333;
-        border-radius: 2px;
-      }
-
       /* Detail items */
       .detail-section {
-        margin-bottom: 10px;
+        margin-bottom: 8px;
       }
 
       .detail-section:last-child {
         margin-bottom: 0;
       }
 
-      .detail-label {
-        font-size: 9px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        color: #555;
-        margin-bottom: 4px;
-      }
-
-      .detail-value {
-        font-family: 'SF Mono', Monaco, Consolas, monospace;
-        font-size: 10px;
-        color: #aaa;
-        word-break: break-all;
-        background: #1a1a1a;
-        padding: 4px 6px;
-        border-radius: 3px;
-      }
-
-      .detail-value.selector {
-        color: #6bcf7f;
-      }
-
-      .detail-value.element {
-        color: #ff6b9d;
-      }
-
-      /* Layout grid */
-      .layout-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
+      /* Layout styles - simple list */
+      .layout-list {
+        display: flex;
+        flex-direction: column;
         gap: 4px;
       }
 
       .layout-item {
-        font-family: 'SF Mono', Monaco, Consolas, monospace;
-        font-size: 10px;
-        padding: 3px 5px;
-        background: #1a1a1a;
-        border-radius: 3px;
+        font-size: 11px;
+        color: #999;
+        line-height: 1.4;
       }
 
       .layout-item .prop {
@@ -292,39 +274,32 @@ export class InfoPanel {
       }
 
       .layout-item .value {
-        color: #ffd93d;
+        color: #ccc;
       }
 
-      /* Breadcrumb */
-      .breadcrumb {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 2px;
-        align-items: center;
+      /* Structure path - simple text */
+      .structure-path {
+        font-size: 11px;
+        color: #999;
+        line-height: 1.5;
       }
 
-      .breadcrumb-item {
-        color: #555;
-        font-family: 'SF Mono', Monaco, Consolas, monospace;
-        font-size: 9px;
+      .structure-path-item {
+        color: #666;
         cursor: pointer;
-        padding: 2px 4px;
-        border-radius: 2px;
-        transition: all 0.15s;
       }
 
-      .breadcrumb-item:hover {
-        color: #e63946;
-        background: rgba(230, 57, 70, 0.1);
+      .structure-path-item:hover {
+        color: #999;
       }
 
-      .breadcrumb-item.current {
-        color: #e63946;
+      .structure-path-item.current {
+        color: #ccc;
       }
 
-      .breadcrumb-sep {
-        color: #333;
-        font-size: 8px;
+      .structure-path-sep {
+        color: #444;
+        margin: 0 4px;
       }
     `;
   }
@@ -340,37 +315,24 @@ export class InfoPanel {
         ></textarea>
 
         <div class="button-row">
+          <button class="details-toggle btn" id="details-toggle">
+            Details
+          </button>
           <button class="btn" id="cancel-btn">Cancel</button>
           <button class="btn primary" id="copy-btn">
-            Copy <span class="count" id="annotation-count">(0)</span>
+            Copy
+            <span class="btn-tooltip" id="copy-tooltip">0 annotations</span>
           </button>
         </div>
       </div>
 
-      <button class="details-toggle" id="details-toggle">
-        <span class="chevron">▶</span>
-        <span>Details</span>
-      </button>
-
       <div class="details-content" id="details-content">
         <div class="detail-section">
-          <div class="detail-label">Selector</div>
-          <div class="detail-value selector" id="selector-text"></div>
+          <div class="layout-list" id="layout-list"></div>
         </div>
 
         <div class="detail-section">
-          <div class="detail-label">Element</div>
-          <div class="detail-value element" id="element-tag"></div>
-        </div>
-
-        <div class="detail-section">
-          <div class="detail-label">Layout</div>
-          <div class="layout-grid" id="layout-grid"></div>
-        </div>
-
-        <div class="detail-section">
-          <div class="detail-label">Path</div>
-          <div class="breadcrumb" id="breadcrumb"></div>
+          <div class="structure-path" id="structure-path"></div>
         </div>
       </div>
     `;
@@ -428,6 +390,7 @@ export class InfoPanel {
       this.detailsExpanded = !this.detailsExpanded;
       detailsToggle.classList.toggle('expanded', this.detailsExpanded);
       detailsContent?.classList.toggle('visible', this.detailsExpanded);
+      this.panel.classList.toggle('details-expanded', this.detailsExpanded);
     });
 
     // Breadcrumb click handlers are added dynamically in show()
@@ -498,51 +461,47 @@ export class InfoPanel {
       this.panel.style.right = 'auto';
     }
 
-    // Selector
-    const selectorEl = this.shadow.getElementById('selector-text');
-    if (selectorEl) selectorEl.textContent = elementInfo.selector;
-
-    // Element tag (truncated)
-    const tagEl = this.shadow.getElementById('element-tag');
-    if (tagEl) {
-      const openingTag = elementInfo.outerHTML.split('>')[0] + '>';
-      const truncated = openingTag.length > 60 ? openingTag.slice(0, 60) + '...' : openingTag;
-      tagEl.textContent = truncated;
-    }
-
-    // Layout grid
-    const layoutGrid = this.shadow.getElementById('layout-grid');
-    if (layoutGrid) {
+    // Layout styles - simplified list
+    const layoutList = this.shadow.getElementById('layout-list');
+    if (layoutList) {
       const styles = elementInfo.computedStyles;
-      const items = [
-        { prop: 'display', value: styles.display },
-        { prop: 'position', value: styles.position },
-        { prop: 'width', value: styles.width },
-        { prop: 'height', value: styles.height },
-      ];
+      const items: Array<{ prop: string; value: string }> = [];
 
-      layoutGrid.innerHTML = items
-        .filter((item) => item.value)
-        .map(
-          (item) =>
-            `<div class="layout-item"><span class="prop">${item.prop}:</span> <span class="value">${item.value}</span></div>`
-        )
+      if (styles.display) items.push({ prop: 'display', value: styles.display });
+      if (styles.position && styles.position !== 'static') {
+        items.push({ prop: 'position', value: styles.position });
+      }
+      if (styles.width) items.push({ prop: 'width', value: styles.width });
+      if (styles.height) items.push({ prop: 'height', value: styles.height });
+      if (styles.flexDirection) items.push({ prop: 'flex-direction', value: styles.flexDirection });
+      if (styles.flexGrow && styles.flexGrow !== '0') {
+        items.push({ prop: 'flex-grow', value: styles.flexGrow });
+      }
+      if (styles.alignItems) items.push({ prop: 'align-items', value: styles.alignItems });
+      if (styles.justifyContent) items.push({ prop: 'justify-content', value: styles.justifyContent });
+      if (styles.gap) items.push({ prop: 'gap', value: styles.gap });
+      if (styles.overflow && styles.overflow !== 'visible') {
+        items.push({ prop: 'overflow', value: styles.overflow });
+      }
+
+      layoutList.innerHTML = items
+        .map((item) => `<div class="layout-item"><span class="prop">${item.prop}</span> <span class="value">${item.value}</span></div>`)
         .join('');
     }
 
-    // Breadcrumb
-    const breadcrumbEl = this.shadow.getElementById('breadcrumb');
-    if (breadcrumbEl) {
-      breadcrumbEl.innerHTML = breadcrumb
-        .slice(-4) // Only show last 4 items
+    // Structure path - simplified
+    const structurePath = this.shadow.getElementById('structure-path');
+    if (structurePath) {
+      structurePath.innerHTML = breadcrumb
+        .slice(-5) // Show last 5 items
         .map(
           (node, i, arr) =>
-            `<span class="breadcrumb-item ${i === arr.length - 1 ? 'current' : ''}" data-index="${breadcrumb.length - arr.length + i}">${node.selector}</span>${i < arr.length - 1 ? '<span class="breadcrumb-sep">›</span>' : ''}`
+            `<span class="structure-path-item ${i === arr.length - 1 ? 'current' : ''}" data-index="${breadcrumb.length - arr.length + i}">${node.selector}</span>${i < arr.length - 1 ? '<span class="structure-path-sep">/</span>' : ''}`
         )
         .join('');
 
       // Add click handlers
-      breadcrumbEl.querySelectorAll('.breadcrumb-item').forEach((item) => {
+      structurePath.querySelectorAll('.structure-path-item').forEach((item) => {
         item.addEventListener('click', () => {
           const index = parseInt(item.getAttribute('data-index') || '0');
           this.callbacks.onBreadcrumbClick(index);
@@ -569,6 +528,7 @@ export class InfoPanel {
 
   hide(): void {
     this.panel.classList.remove('visible');
+    this.panel.classList.remove('details-expanded');
     this._currentElementInfo = null;
     this.currentAnnotation = null;
     // Collapse details when hiding
@@ -578,8 +538,10 @@ export class InfoPanel {
   }
 
   updateAnnotationCount(count: number): void {
-    const countEl = this.shadow.getElementById('annotation-count');
-    if (countEl) countEl.textContent = `(${count})`;
+    const tooltipEl = this.shadow.getElementById('copy-tooltip');
+    if (tooltipEl) {
+      tooltipEl.textContent = count === 1 ? '1 annotation' : `${count} annotations`;
+    }
   }
 
   isVisible(): boolean {

@@ -179,7 +179,7 @@ export class ElementInspector {
     const element = this.layerNavigator.getCurrentElement();
     if (element && element !== this.currentElement) {
       this.currentElement = element;
-      this.highlightOverlay.highlight(element);
+      this.highlightOverlay.highlight(element, false); // Simple highlight on hover
     }
   }
 
@@ -243,7 +243,7 @@ export class ElementInspector {
     const element = this.layerNavigator.getCurrentElement();
     if (element) {
       this.currentElement = element;
-      this.highlightOverlay.highlight(element);
+      this.highlightOverlay.highlight(element, this.isLocked); // Box model when locked
 
       // If panel is visible, update it
       if (this.isLocked && this.infoPanel.isVisible()) {
@@ -307,7 +307,7 @@ export class ElementInspector {
 
     // Update highlight position if element is selected
     if (this.currentElement) {
-      this.highlightOverlay.highlight(this.currentElement);
+      this.highlightOverlay.highlight(this.currentElement, this.isLocked);
     }
   }
 
@@ -316,7 +316,7 @@ export class ElementInspector {
   private selectElement(element: Element): void {
     this.isLocked = true;
     this.currentElement = element;
-    this.highlightOverlay.highlight(element);
+    this.highlightOverlay.highlight(element, true); // Show box model when selected
 
     // Build element info
     this.currentElementInfo = this.buildElementInfo(element);
@@ -351,7 +351,7 @@ export class ElementInspector {
     const element = this.layerNavigator.getCurrentElement();
     if (element) {
       this.currentElement = element;
-      this.highlightOverlay.highlight(element);
+      this.highlightOverlay.highlight(element, this.isLocked); // Box model when locked
 
       if (this.isLocked) {
         this.selectElement(element);
@@ -437,7 +437,15 @@ export class ElementInspector {
 
   private handleCopyAll(): void {
     const annotations = this.annotationManager.getAll();
-    const markdown = this.llmFormatter.formatAnnotations(annotations);
+    let markdown: string;
+
+    if (annotations.length === 0 && this.currentElementInfo) {
+      // If no annotations but element is selected, copy element info
+      markdown = this.llmFormatter.formatElementInfo(this.currentElementInfo);
+    } else {
+      // Otherwise format annotations (which handles empty case)
+      markdown = this.llmFormatter.formatAnnotations(annotations);
+    }
 
     navigator.clipboard.writeText(markdown).then(() => {
       console.log('[Redline] Copied to clipboard');

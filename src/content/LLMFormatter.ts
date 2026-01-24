@@ -6,6 +6,63 @@ import type { Annotation, ElementInfo } from '../shared/types';
  */
 export class LLMFormatter {
   /**
+   * Format a single element info (without annotation)
+   */
+  formatElementInfo(elementInfo: ElementInfo): string {
+    const lines: string[] = [
+      '# Element Information',
+      '',
+      `> Element inspected on ${window.location.href}`,
+      '',
+      `**Selector:** \`${elementInfo.selector}\``,
+      '',
+      `**Element:** \`${this.getTagPreview(elementInfo)}\``,
+      '',
+      '### Layout',
+      '```css',
+      this.formatLayoutStyles(elementInfo),
+      '```',
+      '',
+    ];
+
+    // Parent container (if relevant)
+    if (elementInfo.parentContainer) {
+      const pc = elementInfo.parentContainer;
+      lines.push(`**Parent:** \`${pc.selector}\` (${pc.display})`);
+
+      const parentStyles: string[] = [];
+      if (pc.flexDirection) parentStyles.push(`flex-direction: ${pc.flexDirection}`);
+      if (pc.alignItems) parentStyles.push(`align-items: ${pc.alignItems}`);
+      if (pc.justifyContent) parentStyles.push(`justify-content: ${pc.justifyContent}`);
+      if (pc.gridTemplateColumns) parentStyles.push(`grid-template-columns: ${pc.gridTemplateColumns}`);
+
+      if (parentStyles.length > 0) {
+        lines.push(`- ${parentStyles.join('; ')}`);
+      }
+      lines.push('');
+    }
+
+    // Height chain
+    lines.push('### Height Chain');
+    lines.push(this.formatHeightChain(elementInfo));
+    lines.push('');
+
+    // React component (if detected)
+    if (elementInfo.reactComponent) {
+      const rc = elementInfo.reactComponent;
+      lines.push('### React Component');
+      lines.push(`- **Component:** ${rc.componentName}`);
+      if (rc.fileName) {
+        const location = rc.lineNumber ? `${rc.fileName}:${rc.lineNumber}` : rc.fileName;
+        lines.push(`- **File:** \`${location}\``);
+      }
+      lines.push('');
+    }
+
+    return lines.join('\n');
+  }
+
+  /**
    * Format all annotations as markdown for LLM
    */
   formatAnnotations(annotations: Annotation[]): string {
