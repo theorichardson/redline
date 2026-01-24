@@ -4,29 +4,56 @@
  */
 
 export interface FloatingButtonCallbacks {
-  onToggle: () => void;
+  onToggleRedline: () => void;
+  onToggleRuler: () => void;
 }
 
 export class FloatingButton {
   private container: HTMLElement | null = null;
-  private button: HTMLButtonElement | null = null;
+  private redlineButton: HTMLButtonElement | null = null;
+  private rulerButton: HTMLButtonElement | null = null;
   private callbacks: FloatingButtonCallbacks;
 
-  // SVG Icons
+  // Lucide SVG Icons
+  // layout-grid icon for redline mode (inactive)
   private static readonly ICON_INACTIVE = `
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/>
-      <line x1="3" y1="9" x2="21" y2="9" stroke="currentColor" stroke-width="2"/>
-      <line x1="9" y1="9" x2="9" y2="21" stroke="currentColor" stroke-width="2"/>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect width="7" height="7" x="3" y="3" rx="1"/>
+      <rect width="7" height="7" x="14" y="3" rx="1"/>
+      <rect width="7" height="7" x="14" y="14" rx="1"/>
+      <rect width="7" height="7" x="3" y="14" rx="1"/>
     </svg>
   `;
 
+  // layout-grid icon with fill for active state
   private static readonly ICON_ACTIVE = `
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2" fill="currentColor" fill-opacity="0.1"/>
-      <line x1="3" y1="9" x2="21" y2="9" stroke="currentColor" stroke-width="2"/>
-      <line x1="9" y1="9" x2="9" y2="21" stroke="currentColor" stroke-width="2"/>
-      <circle cx="15" cy="15" r="3" fill="currentColor"/>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect width="7" height="7" x="3" y="3" rx="1" fill="currentColor" fill-opacity="0.3"/>
+      <rect width="7" height="7" x="14" y="3" rx="1" fill="currentColor" fill-opacity="0.3"/>
+      <rect width="7" height="7" x="14" y="14" rx="1" fill="currentColor" fill-opacity="0.3"/>
+      <rect width="7" height="7" x="3" y="14" rx="1" fill="currentColor" fill-opacity="0.3"/>
+    </svg>
+  `;
+
+  // ruler icon for ruler mode (inactive)
+  private static readonly ICON_RULER_INACTIVE = `
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"/>
+      <path d="m14.5 12.5 2-2"/>
+      <path d="m11.5 9.5 2-2"/>
+      <path d="m8.5 6.5 2-2"/>
+      <path d="m17.5 15.5 2-2"/>
+    </svg>
+  `;
+
+  // ruler icon with fill for active state
+  private static readonly ICON_RULER_ACTIVE = `
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z" fill="currentColor" fill-opacity="0.3"/>
+      <path d="m14.5 12.5 2-2"/>
+      <path d="m11.5 9.5 2-2"/>
+      <path d="m8.5 6.5 2-2"/>
+      <path d="m17.5 15.5 2-2"/>
     </svg>
   `;
 
@@ -55,20 +82,53 @@ export class FloatingButton {
 
     this.container.remove();
     this.container = null;
-    this.button = null;
+    this.redlineButton = null;
+    this.rulerButton = null;
   }
 
   /**
-   * Update the active state visual
+   * Show the floating button
    */
-  setActive(active: boolean): void {
-    if (this.button) {
-      this.button.innerHTML = active 
+  show(): void {
+    if (this.container) {
+      this.container.style.display = 'flex';
+    }
+  }
+
+  /**
+   * Hide the floating button
+   */
+  hide(): void {
+    if (this.container) {
+      this.container.style.display = 'none';
+    }
+  }
+
+  /**
+   * Update the redline mode active state visual
+   */
+  setRedlineActive(active: boolean): void {
+    if (this.redlineButton) {
+      this.redlineButton.innerHTML = active 
         ? FloatingButton.ICON_ACTIVE 
         : FloatingButton.ICON_INACTIVE;
-      this.button.classList.toggle('redline-fab--active', active);
-      this.button.setAttribute('aria-pressed', String(active));
-      this.button.title = active ? 'Deactivate Redline Mode' : 'Activate Redline Mode';
+      this.redlineButton.classList.toggle('redline-fab--active', active);
+      this.redlineButton.setAttribute('aria-pressed', String(active));
+      this.redlineButton.title = active ? 'Deactivate Redline Mode' : 'Activate Redline Mode';
+    }
+  }
+
+  /**
+   * Update the ruler mode active state visual
+   */
+  setRulerActive(active: boolean): void {
+    if (this.rulerButton) {
+      this.rulerButton.innerHTML = active 
+        ? FloatingButton.ICON_RULER_ACTIVE 
+        : FloatingButton.ICON_RULER_INACTIVE;
+      this.rulerButton.classList.toggle('redline-fab--active', active);
+      this.rulerButton.setAttribute('aria-pressed', String(active));
+      this.rulerButton.title = active ? 'Deactivate Ruler Mode' : 'Activate Ruler Mode';
     }
   }
 
@@ -81,15 +141,24 @@ export class FloatingButton {
     this.container.id = 'redline-floating-button';
     this.container.setAttribute('data-redline-ui', 'true');
 
-    // Button
-    this.button = document.createElement('button');
-    this.button.className = 'redline-fab';
-    this.button.innerHTML = FloatingButton.ICON_INACTIVE;
-    this.button.setAttribute('aria-label', 'Toggle Redline Mode');
-    this.button.setAttribute('aria-pressed', 'false');
-    this.button.title = 'Activate Redline Mode';
+    // Redline Button
+    this.redlineButton = document.createElement('button');
+    this.redlineButton.className = 'redline-fab';
+    this.redlineButton.innerHTML = FloatingButton.ICON_INACTIVE;
+    this.redlineButton.setAttribute('aria-label', 'Toggle Redline Mode');
+    this.redlineButton.setAttribute('aria-pressed', 'false');
+    this.redlineButton.title = 'Activate Redline Mode';
 
-    this.container.appendChild(this.button);
+    // Ruler Button
+    this.rulerButton = document.createElement('button');
+    this.rulerButton.className = 'redline-fab';
+    this.rulerButton.innerHTML = FloatingButton.ICON_RULER_INACTIVE;
+    this.rulerButton.setAttribute('aria-label', 'Toggle Ruler Mode');
+    this.rulerButton.setAttribute('aria-pressed', 'false');
+    this.rulerButton.title = 'Activate Ruler Mode';
+
+    this.container.appendChild(this.redlineButton);
+    this.container.appendChild(this.rulerButton);
   }
 
   /**
@@ -109,6 +178,8 @@ export class FloatingButton {
         transform: translateX(-50%);
         z-index: 2147483646;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        display: flex;
+        gap: 8px;
       }
 
       .redline-fab {
@@ -175,10 +246,16 @@ export class FloatingButton {
    * Attach event listeners
    */
   private attachEventListeners(): void {
-    this.button?.addEventListener('click', (e) => {
+    this.redlineButton?.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      this.callbacks.onToggle();
+      this.callbacks.onToggleRedline();
+    });
+
+    this.rulerButton?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.callbacks.onToggleRuler();
     });
 
     // Prevent drag behavior

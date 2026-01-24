@@ -1,4 +1,4 @@
-import type { ElementInfo, AncestorNode } from '../shared/types';
+import type { ElementInfo, AncestorNode, AlignmentGroup, AlignedElementInfo } from '../shared/types';
 import { HighlightOverlay } from './HighlightOverlay';
 import { LayerNavigator } from './LayerNavigator';
 import { StyleAnalyzer } from './StyleAnalyzer';
@@ -7,6 +7,9 @@ import { ReactDetector } from './ReactDetector';
 import { AnnotationManager } from './AnnotationManager';
 import { InfoPanel } from './InfoPanel';
 import { LLMFormatter } from './LLMFormatter';
+import { AlignmentGuides, type RulerLine } from './AlignmentGuides';
+import { RulerPrompt } from './RulerPrompt';
+import { AlignmentAnalyzer } from './AlignmentAnalyzer';
 
 export interface ElementInspectorCallbacks {
   onDeactivate?: () => void;
@@ -18,11 +21,15 @@ export interface ElementInspectorCallbacks {
  */
 export class ElementInspector {
   private isActive = false;
+  private isRulerMode = false; // When true, show alignment guides instead of details
   private isLocked = false; // When true, don't follow mouse (element selected)
   private callbacks: ElementInspectorCallbacks;
 
   // Components
   private highlightOverlay: HighlightOverlay;
+  private alignmentGuides: AlignmentGuides;
+  private rulerPrompt: RulerPrompt;
+  private alignmentAnalyzer: AlignmentAnalyzer;
   private layerNavigator: LayerNavigator;
   private styleAnalyzer: StyleAnalyzer;
   private selectorGenerator: SelectorGenerator;
@@ -35,6 +42,7 @@ export class ElementInspector {
   private currentElement: Element | null = null;
   private currentElementInfo: ElementInfo | null = null;
   private lastClickPosition: { x: number; y: number } = { x: 0, y: 0 };
+  private selectedRulerLine: RulerLine | null = null;
 
   // Bound event handlers (for removal)
   private boundHandleMouseMove: (e: MouseEvent) => void;
@@ -54,12 +62,25 @@ export class ElementInspector {
 
     // Initialize components
     this.highlightOverlay = new HighlightOverlay();
+    this.alignmentAnalyzer = new AlignmentAnalyzer();
     this.layerNavigator = new LayerNavigator();
     this.styleAnalyzer = new StyleAnalyzer();
     this.selectorGenerator = new SelectorGenerator();
     this.reactDetector = new ReactDetector();
     this.annotationManager = new AnnotationManager();
     this.llmFormatter = new LLMFormatter();
+
+    // Initialize alignment guides with line click and hover callbacks
+    this.alignmentGuides = new AlignmentGuides({
+      onLineClick: (line, clickPos) => this.handleRulerLineClick(line, clickPos),
+      onLineHover: (line) => this.handleRulerLineHover(line),
+    });
+
+    // Initialize ruler prompt
+    this.rulerPrompt = new RulerPrompt({
+      onSubmit: (prompt) => this.handleRulerPromptSubmit(prompt),
+      onCancel: () => this.handleRulerPromptCancel(),
+    });
 
     // Initialize info panel with callbacks
     this.infoPanel = new InfoPanel({
@@ -106,9 +127,14 @@ export class ElementInspector {
     this.isLocked = false;
 
     // Mount UI components
-    this.highlightOverlay.mount();
+    if (this.isRulerMode) {
+      this.alignmentGuides.mount();
+      this.rulerPrompt.mount();
+    } else {
+      this.highlightOverlay.mount();
+      this.infoPanel.mount();
+    }
     this.annotationManager.mount();
-    this.infoPanel.mount();
 
     // Add event listeners
     document.addEventListener('mousemove', this.boundHandleMouseMove, true);
@@ -141,11 +167,15 @@ export class ElementInspector {
 
     // Hide UI
     this.highlightOverlay.hide();
+    this.alignmentGuides.hide();
     this.infoPanel.hide();
+    this.rulerPrompt.hide();
 
     // Unmount (but keep annotation badges visible)
     this.highlightOverlay.unmount();
+    this.alignmentGuides.unmount();
     this.infoPanel.unmount();
+    this.rulerPrompt.unmount();
 
     // Reset cursor
     document.body.style.cursor = '';
@@ -153,6 +183,7 @@ export class ElementInspector {
     // Reset state
     this.currentElement = null;
     this.currentElementInfo = null;
+    this.selectedRulerLine = null;
     this.layerNavigator.reset();
     this.accumulatedWheelDelta = 0;
     this.hasShownBoundsShake = false;
@@ -185,10 +216,112 @@ export class ElementInspector {
     return this.isActive;
   }
 
+  /**
+   * Activate ruler mode
+   */
+  activateRulerMode(): void {
+    if (this.isRulerMode) return;
+
+    this.isRulerMode = true;
+
+    // If inspector is active, switch to ruler display
+    if (this.isActive) {
+      this.highlightOverlay.hide();
+      this.highlightOverlay.unmount();
+      this.infoPanel.hide();
+      this.infoPanel.unmount();
+      this.alignmentGuides.mount();
+      this.rulerPrompt.mount();
+
+      // Re-highlight current element with ruler mode
+      if (this.currentElement) {
+        this.alignmentGuides.showGuides(this.currentElement);
+      }
+    }
+
+    console.log('[Redline] Ruler mode activated');
+  }
+
+  /**
+   * Deactivate ruler mode
+   */
+  deactivateRulerMode(): void {
+    if (!this.isRulerMode) return;
+
+    this.isRulerMode = false;
+
+    // If inspector is active, switch back to normal display
+    if (this.isActive) {
+      this.alignmentGuides.hide();
+      this.alignmentGuides.unmount();
+      this.rulerPrompt.hide();
+      this.rulerPrompt.unmount();
+      this.highlightOverlay.mount();
+      this.infoPanel.mount();
+
+      // Re-highlight current element with normal mode
+      if (this.currentElement) {
+        this.highlightOverlay.highlight(this.currentElement);
+      }
+    } else {
+      this.alignmentGuides.hide();
+      this.alignmentGuides.unmount();
+      this.rulerPrompt.hide();
+      this.rulerPrompt.unmount();
+    }
+
+    // Clear selection state
+    this.selectedRulerLine = null;
+
+    console.log('[Redline] Ruler mode deactivated');
+  }
+
+  /**
+   * Toggle ruler mode
+   */
+  toggleRulerMode(): void {
+    if (this.isRulerMode) {
+      this.deactivateRulerMode();
+    } else {
+      this.activateRulerMode();
+    }
+  }
+
+  /**
+   * Check if ruler mode is active
+   */
+  getIsRulerMode(): boolean {
+    return this.isRulerMode;
+  }
+
   // --- Event Handlers ---
 
   private handleMouseMove(e: MouseEvent): void {
     if (!this.isActive || this.isLocked) return;
+
+    // In ruler mode, check if we're interacting with ruler UI
+    if (this.isRulerMode) {
+      const target = e.target as Element;
+      
+      // Don't update element if hovering over ruler lines or prompt
+      // This prevents flickering when moving mouse toward ruler lines
+      if (
+        target.closest('[data-redline-guides]') ||
+        target.closest('[data-redline-ui]')
+      ) {
+        return;
+      }
+      
+      // Don't update while a line is selected (prompt is open)
+      if (this.selectedRulerLine) {
+        return;
+      }
+      
+      // If CMD/Meta key is held, lock the rulers to current element
+      if (e.metaKey || e.ctrlKey) {
+        return;
+      }
+    }
 
     // Update layer navigator
     this.layerNavigator.updateAtPoint(e.clientX, e.clientY);
@@ -197,7 +330,14 @@ export class ElementInspector {
     const element = this.layerNavigator.getCurrentElement();
     if (element && element !== this.currentElement) {
       this.currentElement = element;
-      this.highlightOverlay.highlight(element, false); // Simple highlight on hover
+
+      // Show guides or highlight based on mode
+      if (this.isRulerMode) {
+        this.alignmentGuides.showGuides(element);
+      } else {
+        this.highlightOverlay.highlight(element, false); // Simple highlight on hover
+      }
+
       // Reset scroll state when hovering a new element
       this.accumulatedWheelDelta = 0;
       this.hasShownBoundsShake = false;
@@ -207,19 +347,30 @@ export class ElementInspector {
   private handleClick(e: MouseEvent): void {
     if (!this.isActive) return;
 
-    // Check if click is on our UI
+    // Check if click is on our UI (let it through)
     const target = e.target as Element;
     if (
       target.closest('[data-redline-overlay]') ||
       target.closest('[data-redline-panel]') ||
       target.closest('[data-redline-badges]') ||
-      target.closest('[data-redline-ui]')
+      target.closest('[data-redline-ui]') ||
+      target.closest('[data-redline-guides]')
     ) {
-      return; // Let the click through to our UI
+      return; // Let the click through to our UI (including ruler lines)
     }
 
     e.preventDefault();
     e.stopPropagation();
+
+    // In ruler mode, clicking outside the guides clears selection
+    if (this.isRulerMode) {
+      if (this.selectedRulerLine) {
+        this.rulerPrompt.hide();
+        this.alignmentGuides.clearSelection();
+        this.selectedRulerLine = null;
+      }
+      return;
+    }
 
     // Save click position for panel positioning
     this.lastClickPosition = { x: e.clientX, y: e.clientY };
@@ -299,10 +450,16 @@ export class ElementInspector {
     const element = this.layerNavigator.getCurrentElement();
     if (element) {
       this.currentElement = element;
-      this.highlightOverlay.highlight(element, this.isLocked); // Box model when locked
+
+      // Show guides or highlight based on mode
+      if (this.isRulerMode) {
+        this.alignmentGuides.showGuides(element);
+      } else {
+        this.highlightOverlay.highlight(element, this.isLocked); // Box model when locked
+      }
 
       // If panel is visible, update it
-      if (this.isLocked && this.infoPanel.isVisible()) {
+      if (this.isLocked && this.infoPanel.isVisible() && !this.isRulerMode) {
         this.selectElement(element);
       }
     }
@@ -323,6 +480,15 @@ export class ElementInspector {
 
     switch (e.key) {
       case 'Escape':
+        // In ruler mode, Escape cancels selection first
+        if (this.isRulerMode && this.selectedRulerLine) {
+          this.rulerPrompt.hide();
+          this.alignmentGuides.clearSelection();
+          this.selectedRulerLine = null;
+          e.preventDefault();
+          return;
+        }
+
         if (this.isLocked) {
           // Unlock and go back to hover mode
           this.isLocked = false;
@@ -363,7 +529,11 @@ export class ElementInspector {
 
     // Update highlight position if element is selected
     if (this.currentElement) {
-      this.highlightOverlay.highlight(this.currentElement, this.isLocked);
+      if (this.isRulerMode) {
+        this.alignmentGuides.showGuides(this.currentElement);
+      } else {
+        this.highlightOverlay.highlight(this.currentElement, this.isLocked);
+      }
     }
   }
 
@@ -407,9 +577,15 @@ export class ElementInspector {
     const element = this.layerNavigator.getCurrentElement();
     if (element) {
       this.currentElement = element;
-      this.highlightOverlay.highlight(element, this.isLocked); // Box model when locked
 
-      if (this.isLocked) {
+      // Show guides or highlight based on mode
+      if (this.isRulerMode) {
+        this.alignmentGuides.showGuides(element);
+      } else {
+        this.highlightOverlay.highlight(element, this.isLocked); // Box model when locked
+      }
+
+      if (this.isLocked && !this.isRulerMode) {
         this.selectElement(element);
       }
     }
@@ -540,6 +716,134 @@ export class ElementInspector {
         this.updateCurrentElement();
       }
     }
+  }
+
+  // --- Ruler Mode Handlers ---
+
+  private handleRulerLineClick(line: RulerLine, clickPosition: { x: number; y: number }): void {
+    this.selectedRulerLine = line;
+
+    // Show the prompt near where the user clicked
+    const alignmentTypeLabel = this.formatAlignmentTypeLabel(line.type);
+
+    this.rulerPrompt.show(
+      clickPosition,
+      line.orientation,
+      line.elements.length,
+      alignmentTypeLabel
+    );
+
+    console.log(`[Redline] Selected ruler line: ${line.type} at ${line.position}px with ${line.elements.length} elements`);
+  }
+
+  private handleRulerLineHover(line: RulerLine | null): void {
+    // This is called when hovering over ruler lines to show preview
+    // The actual highlighting is done in AlignmentGuides
+    if (line) {
+      console.log(`[Redline] Hovering ruler line: ${line.type} with ${line.elements.length} elements`);
+    }
+  }
+
+  private handleRulerPromptSubmit(prompt: string): void {
+    if (!this.selectedRulerLine) return;
+
+    // Build alignment group
+    const alignmentGroup = this.buildAlignmentGroup(this.selectedRulerLine, prompt);
+
+    // Format for LLM
+    const markdown = this.llmFormatter.formatAlignmentGroup(alignmentGroup);
+
+    // Copy to clipboard
+    navigator.clipboard.writeText(markdown).then(() => {
+      console.log('[Redline] Alignment info copied to clipboard');
+    });
+
+    // Hide prompt and clear selection
+    this.rulerPrompt.hide();
+    this.alignmentGuides.clearSelection();
+    this.selectedRulerLine = null;
+  }
+
+  private handleRulerPromptCancel(): void {
+    this.rulerPrompt.hide();
+    if (this.selectedRulerLine) {
+      this.alignmentGuides.clearSelection();
+      this.selectedRulerLine = null;
+    }
+  }
+
+  private formatAlignmentTypeLabel(type: string): string {
+    const labels: Record<string, string> = {
+      top: 'top edge',
+      bottom: 'bottom edge',
+      left: 'left edge',
+      right: 'right edge',
+      centerX: 'horizontal center',
+      centerY: 'vertical center',
+    };
+    return labels[type] || type;
+  }
+
+  private buildAlignmentGroup(line: RulerLine, prompt: string): AlignmentGroup {
+    const axis = line.orientation === 'horizontal' ? 'horizontal' : 'vertical';
+    const elements: AlignedElementInfo[] = [];
+
+    for (const element of line.elements) {
+      const elementInfo = this.buildElementInfo(element);
+      const rect = element.getBoundingClientRect();
+
+      // Calculate offset from line
+      let offset: number;
+      if (axis === 'horizontal') {
+        switch (line.type) {
+          case 'top':
+            offset = rect.top - line.position;
+            break;
+          case 'bottom':
+            offset = rect.bottom - line.position;
+            break;
+          case 'centerY':
+            offset = rect.top + rect.height / 2 - line.position;
+            break;
+          default:
+            offset = 0;
+        }
+      } else {
+        switch (line.type) {
+          case 'left':
+            offset = rect.left - line.position;
+            break;
+          case 'right':
+            offset = rect.right - line.position;
+            break;
+          case 'centerX':
+            offset = rect.left + rect.width / 2 - line.position;
+            break;
+          default:
+            offset = 0;
+        }
+      }
+
+      // Get alignment context
+      const alignmentContext = this.alignmentAnalyzer.getAlignmentContext(
+        element,
+        line.elements
+      );
+
+      elements.push({
+        ...elementInfo,
+        offsetFromLine: offset,
+        alignmentContext,
+      });
+    }
+
+    return {
+      axis,
+      position: line.position,
+      alignmentType: line.type,
+      elements,
+      prompt,
+    };
   }
 
   // --- Public Methods ---

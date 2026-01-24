@@ -111,11 +111,34 @@ export interface Annotation {
   timestamp: number;
 }
 
+// Alignment context for elements on a ruler line
+export interface AlignmentContext {
+  shareParent: boolean;
+  commonAncestor: string | null;
+  currentMethod: 'flex' | 'grid' | 'absolute' | 'margin' | 'unknown';
+}
+
+// Element info extended with alignment data
+export interface AlignedElementInfo extends ElementInfo {
+  offsetFromLine: number; // How many px off from the ideal line
+  alignmentContext: AlignmentContext;
+}
+
+// Group of elements aligned along a ruler line
+export interface AlignmentGroup {
+  axis: 'horizontal' | 'vertical';
+  position: number;
+  alignmentType: 'top' | 'bottom' | 'left' | 'right' | 'centerX' | 'centerY';
+  elements: AlignedElementInfo[];
+  prompt: string;
+}
+
 // Messages between background and content script
 export type Message =
   | { type: 'TOGGLE_INSPECTION' }
   | { type: 'GET_STATE' }
-  | { type: 'STATE_RESPONSE'; isActive: boolean };
+  | { type: 'STATE_RESPONSE'; isActive: boolean }
+  | { type: 'REDLINE_ENABLED_CHANGED'; enabled: boolean };
 
 // Extension settings
 export interface RedlineSettings {

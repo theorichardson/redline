@@ -4,6 +4,7 @@
  */
 
 const activateBtn = document.getElementById('activate-btn') as HTMLButtonElement;
+const enableToggle = document.getElementById('enable-toggle') as HTMLElement;
 
 /**
  * Ensure content script is loaded and toggle inspection
@@ -28,6 +29,68 @@ async function activateInspector(tabId: number): Promise<void> {
     }
   }
 }
+
+/**
+ * Get the enabled state from storage
+ */
+async function getEnabledState(): Promise<boolean> {
+  const result = await chrome.storage.local.get('redlineEnabled');
+  return result.redlineEnabled !== false; // Default to true
+}
+
+/**
+ * Set the enabled state in storage
+ */
+async function setEnabledState(enabled: boolean): Promise<void> {
+  await chrome.storage.local.set({ redlineEnabled: enabled });
+}
+
+/**
+ * Update the toggle UI
+ */
+function updateToggleUI(enabled: boolean): void {
+  if (enabled) {
+    enableToggle.classList.add('active');
+    enableToggle.setAttribute('aria-checked', 'true');
+  } else {
+    enableToggle.classList.remove('active');
+    enableToggle.setAttribute('aria-checked', 'false');
+  }
+}
+
+/**
+ * Notify all tabs about the state change
+ */
+async function notifyAllTabs(enabled: boolean): Promise<void> {
+  const tabs = await chrome.tabs.query({});
+  for (const tab of tabs) {
+    if (tab.id) {
+      try {
+        await chrome.tabs.sendMessage(tab.id, { 
+          type: 'REDLINE_ENABLED_CHANGED', 
+          enabled 
+        });
+      } catch {
+        // Tab may not have content script loaded yet
+      }
+    }
+  }
+}
+
+// Initialize toggle state
+getEnabledState().then((enabled) => {
+  updateToggleUI(enabled);
+});
+
+// Handle toggle click
+enableToggle?.addEventListener('click', async () => {
+  const currentState = enableToggle.classList.contains('active');
+  const newState = !currentState;
+  
+  updateToggleUI(newState);
+  await setEnabledState(newState);
+  await notifyAllTabs(newState);
+});
 
 // Check current state
 chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {

@@ -1,10 +1,132 @@
-import type { Annotation, ElementInfo } from '../shared/types';
+import type { Annotation, ElementInfo, AlignmentGroup, AlignedElementInfo } from '../shared/types';
+import { AlignmentAnalyzer } from './AlignmentAnalyzer';
 
 /**
  * LLMFormatter - Format annotations and element info for LLM consumption
  * Outputs structured markdown optimized for coding agents
  */
 export class LLMFormatter {
+  private alignmentAnalyzer: AlignmentAnalyzer;
+
+  constructor() {
+    this.alignmentAnalyzer = new AlignmentAnalyzer();
+  }
+
+  /**
+   * Format alignment group for LLM consumption
+   */
+  formatAlignmentGroup(group: AlignmentGroup): string {
+    const lines: string[] = [
+      '# Alignment Task',
+      '',
+      `> Page: ${window.location.href}`,
+      '',
+    ];
+
+    // User prompt
+    if (group.prompt) {
+      lines.push(`## Prompt: ${group.prompt}`);
+      lines.push('');
+    }
+
+    // Axis and position info
+    const axisLabel = group.axis === 'horizontal' ? 'Horizontal' : 'Vertical';
+    const posLabel = group.axis === 'horizontal' ? 'Y' : 'X';
+    const alignTypeLabel = this.formatAlignmentType(group.alignmentType);
+
+    lines.push(`**Axis:** ${axisLabel} line at ${posLabel}=${Math.round(group.position)}px (${alignTypeLabel})`);
+    lines.push(`**Elements to align:** ${group.elements.length} element${group.elements.length > 1 ? 's' : ''}`);
+    lines.push('');
+
+    // Individual elements
+    group.elements.forEach((element, index) => {
+      lines.push(...this.formatAlignedElement(element, index + 1, group.axis, group.position));
+      lines.push('');
+    });
+
+    lines.push('---');
+    lines.push('');
+
+    // Analyze relationships and suggest strategy
+    const elements = group.elements.map((e) => {
+      try {
+        return document.querySelector(e.selector);
+      } catch {
+        return null;
+      }
+    }).filter((e): e is Element => e !== null);
+
+    if (elements.length > 0) {
+      const relationship = this.alignmentAnalyzer.analyzeRelationship(elements);
+      const strategy = this.alignmentAnalyzer.suggestAlignmentStrategy(
+        elements,
+        group.axis
+      );
+
+      lines.push('## Alignment Strategy');
+      lines.push('');
+
+      // Relationship info
+      if (relationship.areSiblings) {
+        lines.push(`**Relationship:** Elements are siblings in \`${relationship.commonAncestorSelector}\``);
+      } else if (relationship.shareParent) {
+        lines.push(`**Relationship:** Elements share parent \`${relationship.commonAncestorSelector}\``);
+      } else {
+        lines.push('**Relationship:** Elements do NOT share a common parent');
+        if (relationship.commonAncestorSelector) {
+          lines.push(`- Common ancestor: \`${relationship.commonAncestorSelector}\``);
+        }
+      }
+      lines.push('');
+
+      // Strategy recommendation
+      lines.push(`**Recommended approach:** ${strategy.explanation}`);
+      lines.push('');
+
+      // Concrete suggestions
+      lines.push('**Suggested implementation:**');
+      lines.push('');
+      lines.push('```css');
+      lines.push(strategy.codePattern);
+      lines.push('```');
+      lines.push('');
+
+      // Additional considerations
+      lines.push('**Important considerations:**');
+      if (relationship.areSiblings) {
+        lines.push('- Elements share a parent, so container-level alignment properties will affect all siblings');
+        lines.push('- Consider using flexbox or grid for robust, responsive alignment');
+      } else {
+        lines.push('- Elements are in different containers, requiring coordination across parent boundaries');
+        lines.push('- Consider using CSS custom properties (variables) for maintainable alignment values');
+        lines.push('- Test alignment at different viewport sizes if responsive design is important');
+      }
+      lines.push('');
+
+      // Offset warnings
+      const misalignedElements = group.elements.filter((e) => Math.abs(e.offsetFromLine) > 2);
+      if (misalignedElements.length > 0) {
+        lines.push('**Elements currently off alignment:**');
+        misalignedElements.forEach((el) => {
+          const offset = Math.abs(Math.round(el.offsetFromLine));
+          const direction = el.offsetFromLine > 0 ? 'below' : 'above';
+          lines.push(`- \`${el.selector}\`: ${offset}px ${direction} target line`);
+        });
+        lines.push('');
+      }
+    }
+
+    // Best practices
+    lines.push('## Best Practices for Clean Code');
+    lines.push('');
+    lines.push('1. **Avoid magic numbers:** Use variables or design tokens instead of hardcoded pixel values');
+    lines.push('2. **Prefer modern layout:** Flexbox and Grid are more maintainable than absolute positioning');
+    lines.push('3. **Consider responsiveness:** Alignment that works at one viewport may break at others');
+    lines.push('4. **Use semantic structure:** Proper HTML hierarchy makes alignment easier to achieve and maintain');
+    lines.push('5. **Test thoroughly:** Verify alignment with different content lengths and states');
+
+    return lines.join('\n');
+  }
   /**
    * Format a single element info (without annotation)
    */
@@ -317,6 +439,87 @@ export class LLMFormatter {
       /^rounded/,
     ];
     return utilityPatterns.some((p) => p.test(className));
+  }
+
+  /**
+   * Format a single aligned element
+   */
+  private formatAlignedElement(
+    element: AlignedElementInfo,
+    index: number,
+    axis: 'horizontal' | 'vertical',
+    targetPosition: number
+  ): string[] {
+    const lines: string[] = [];
+    const coordLabel = axis === 'horizontal' ? 'Y' : 'X';
+    const currentPos = this.getCurrentPosition(element, axis);
+    const offset = Math.round(element.offsetFromLine);
+    const offStatus = Math.abs(offset) <= 1 ? 'aligned' : `${Math.abs(offset)}px off`;
+
+    lines.push(`### Element ${index}: \`${this.getSimpleSelector(element)}\``);
+    lines.push(`- **Current ${coordLabel}:** ${Math.round(currentPos)}px (${offStatus})`);
+    lines.push(`- **Target ${coordLabel}:** ${Math.round(targetPosition)}px`);
+    lines.push(`- **Selector:** \`${element.selector}\``);
+
+    // Parent info
+    if (element.parentContainer) {
+      const pc = element.parentContainer;
+      lines.push(`- **Parent:** \`${pc.selector}\` (${pc.display})`);
+    }
+
+    // Alignment context
+    const ctx = element.alignmentContext;
+    lines.push(`- **Current method:** ${ctx.currentMethod}`);
+
+    // Layout properties
+    const styles = element.computedStyles;
+    const relevantProps: string[] = [];
+    if (styles.margin !== '0px') relevantProps.push(`margin: ${styles.margin}`);
+    if (styles.padding !== '0px') relevantProps.push(`padding: ${styles.padding}`);
+    if (styles.position !== 'static') relevantProps.push(`position: ${styles.position}`);
+
+    if (relevantProps.length > 0) {
+      lines.push(`- **Current styles:** ${relevantProps.join(', ')}`);
+    }
+
+    return lines;
+  }
+
+  /**
+   * Get current position of element along an axis
+   */
+  private getCurrentPosition(element: AlignedElementInfo, axis: 'horizontal' | 'vertical'): number {
+    const rect = element.boundingRect;
+    return axis === 'horizontal' ? rect.top : rect.left;
+  }
+
+  /**
+   * Get simple selector for element
+   */
+  private getSimpleSelector(element: ElementInfo): string {
+    if (element.id) {
+      return `#${element.id}`;
+    }
+    const mainClass = element.classList.find((c) => !this.isUtilityClass(c));
+    if (mainClass) {
+      return `.${mainClass}`;
+    }
+    return element.tagName;
+  }
+
+  /**
+   * Format alignment type as human-readable label
+   */
+  private formatAlignmentType(type: string): string {
+    const labels: Record<string, string> = {
+      top: 'top edges',
+      bottom: 'bottom edges',
+      left: 'left edges',
+      right: 'right edges',
+      centerX: 'horizontal centers',
+      centerY: 'vertical centers',
+    };
+    return labels[type] || type;
   }
 
   /**
