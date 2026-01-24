@@ -7,19 +7,29 @@ import { ElementInspector } from './ElementInspector';
 import { FloatingButton } from './FloatingButton';
 import type { Message } from '../shared/types';
 
-// Initialize inspector
-const inspector = new ElementInspector();
+// Forward declare so inspector can reference it
+let floatingButton: FloatingButton;
+
+// Helper to sync state
+function syncState(): void {
+  const isActive = inspector.getIsActive();
+  floatingButton.setActive(isActive);
+  chrome.runtime.sendMessage({
+    type: 'STATE_CHANGED',
+    isActive,
+  });
+}
+
+// Initialize inspector with callback for when it deactivates itself (e.g., via Escape)
+const inspector = new ElementInspector({
+  onDeactivate: () => syncState(),
+});
 
 // Initialize floating button
-const floatingButton = new FloatingButton({
+floatingButton = new FloatingButton({
   onToggle: () => {
     inspector.toggle();
-    floatingButton.setActive(inspector.getIsActive());
-    // Notify background of state change
-    chrome.runtime.sendMessage({
-      type: 'STATE_CHANGED',
-      isActive: inspector.getIsActive(),
-    });
+    syncState();
   },
 });
 
@@ -35,12 +45,7 @@ chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) =
   switch (message.type) {
     case 'TOGGLE_INSPECTION':
       inspector.toggle();
-      floatingButton.setActive(inspector.getIsActive());
-      // Notify background of state change
-      chrome.runtime.sendMessage({
-        type: 'STATE_CHANGED',
-        isActive: inspector.getIsActive(),
-      });
+      syncState();
       sendResponse({ success: true });
       break;
 
@@ -61,11 +66,7 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     console.log('[Redline] Keyboard shortcut detected, toggling...');
     inspector.toggle();
-    floatingButton.setActive(inspector.getIsActive());
-    chrome.runtime.sendMessage({
-      type: 'STATE_CHANGED',
-      isActive: inspector.getIsActive(),
-    });
+    syncState();
   }
 });
 

@@ -8,6 +8,10 @@ import { AnnotationManager } from './AnnotationManager';
 import { InfoPanel } from './InfoPanel';
 import { LLMFormatter } from './LLMFormatter';
 
+export interface ElementInspectorCallbacks {
+  onDeactivate?: () => void;
+}
+
 /**
  * ElementInspector - Main controller coordinating all inspection features
  * Manages activation state, event handling, and component coordination
@@ -15,6 +19,7 @@ import { LLMFormatter } from './LLMFormatter';
 export class ElementInspector {
   private isActive = false;
   private isLocked = false; // When true, don't follow mouse (element selected)
+  private callbacks: ElementInspectorCallbacks;
 
   // Components
   private highlightOverlay: HighlightOverlay;
@@ -38,11 +43,15 @@ export class ElementInspector {
   private boundHandleKeyDown: (e: KeyboardEvent) => void;
   private boundHandleScroll: () => void;
 
-  // Scroll throttling - time-based to prevent rapid navigation
-  private lastWheelNavigationTime = 0;
-  private readonly WHEEL_THROTTLE_MS = 300; // Only allow navigation every 300ms
+  // Scroll position-based navigation
+  private accumulatedWheelDelta = 0;
+  private readonly WHEEL_THRESHOLD = 50; // Pixels of scroll needed to trigger navigation
+  private hasShownBoundsShake = false; // Prevents repeated shake at bounds
+  private boundsShakeResetTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  constructor() {
+  constructor(callbacks: ElementInspectorCallbacks = {}) {
+    this.callbacks = callbacks;
+
     // Initialize components
     this.highlightOverlay = new HighlightOverlay();
     this.layerNavigator = new LayerNavigator();
@@ -145,6 +154,15 @@ export class ElementInspector {
     this.currentElement = null;
     this.currentElementInfo = null;
     this.layerNavigator.reset();
+    this.accumulatedWheelDelta = 0;
+    this.hasShownBoundsShake = false;
+    if (this.boundsShakeResetTimeout) {
+      clearTimeout(this.boundsShakeResetTimeout);
+      this.boundsShakeResetTimeout = null;
+    }
+
+    // Notify listeners
+    this.callbacks.onDeactivate?.();
 
     console.log('[Redline] Inspection mode deactivated');
   }
@@ -180,6 +198,9 @@ export class ElementInspector {
     if (element && element !== this.currentElement) {
       this.currentElement = element;
       this.highlightOverlay.highlight(element, false); // Simple highlight on hover
+      // Reset scroll state when hovering a new element
+      this.accumulatedWheelDelta = 0;
+      this.hasShownBoundsShake = false;
     }
   }
 
@@ -222,22 +243,57 @@ export class ElementInspector {
     e.preventDefault();
     e.stopPropagation();
 
-    // Throttle navigation based on time
-    const now = Date.now();
-    if (now - this.lastWheelNavigationTime < this.WHEEL_THROTTLE_MS) {
-      return; // Too soon since last navigation, ignore this scroll
+    // Accumulate scroll delta
+    this.accumulatedWheelDelta += e.deltaY;
+
+    // Check if we've scrolled enough to trigger navigation
+    if (Math.abs(this.accumulatedWheelDelta) < this.WHEEL_THRESHOLD) {
+      return; // Not enough scroll yet
     }
 
-    this.lastWheelNavigationTime = now;
+    // Determine direction and check if we can navigate
+    const direction = this.accumulatedWheelDelta > 0 ? 1 : -1;
+    const canNavigate =
+      direction > 0 ? this.layerNavigator.canNavigateUp() : this.layerNavigator.canNavigateDown();
 
-    // Navigate layers based on scroll direction
-    if (e.deltaY > 0) {
+    if (!canNavigate) {
+      // At bounds - shake once to indicate can't go further
+      if (!this.hasShownBoundsShake) {
+        this.highlightOverlay.shake();
+        this.hasShownBoundsShake = true;
+      }
+      // Reset accumulator but keep the flag set
+      this.accumulatedWheelDelta = 0;
+
+      // Allow re-triggering after a pause (new scroll gesture)
+      if (this.boundsShakeResetTimeout) {
+        clearTimeout(this.boundsShakeResetTimeout);
+      }
+      this.boundsShakeResetTimeout = setTimeout(() => {
+        this.hasShownBoundsShake = false;
+        this.boundsShakeResetTimeout = null;
+      }, 150);
+
+      return;
+    }
+
+    // Successfully navigating - clear the bounds shake state
+    this.hasShownBoundsShake = false;
+    if (this.boundsShakeResetTimeout) {
+      clearTimeout(this.boundsShakeResetTimeout);
+      this.boundsShakeResetTimeout = null;
+    }
+
+    if (direction > 0) {
       // Scroll down = go toward parents (deeper in stack)
       this.layerNavigator.navigateUp();
     } else {
       // Scroll up = go toward children (shallower in stack)
       this.layerNavigator.navigateDown();
     }
+
+    // Subtract threshold (preserves momentum for fast scrolling)
+    this.accumulatedWheelDelta -= direction * this.WHEEL_THRESHOLD;
 
     // Update highlight
     const element = this.layerNavigator.getCurrentElement();

@@ -186,6 +186,20 @@ export class HighlightOverlay {
         color: #8b8b9a;
         margin-left: 8px;
       }
+
+      @keyframes redline-shake {
+        0%, 100% { transform: translateX(0); }
+        20% { transform: translateX(-3px); }
+        40% { transform: translateX(3px); }
+        60% { transform: translateX(-2px); }
+        80% { transform: translateX(2px); }
+      }
+
+      .redline-box.shake,
+      .box-model-layer.shake,
+      .box-labels.shake {
+        animation: redline-shake 0.3s ease-in-out;
+      }
     `;
   }
 
@@ -482,22 +496,57 @@ export class HighlightOverlay {
       <span class="dims">${width} × ${height}</span>
     `;
 
-    // Position tooltip above element (accounting for margin if showing box model)
-    const tooltipHeight = 30;
+    // Show tooltip temporarily to measure its dimensions
+    this.tooltip.style.visibility = 'hidden';
+    this.tooltip.style.display = 'block';
+    const tooltipRect = this.tooltip.getBoundingClientRect();
+    const tooltipWidth = tooltipRect.width;
+    const tooltipHeight = tooltipRect.height;
+    this.tooltip.style.visibility = '';
+
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const padding = 8; // Minimum distance from viewport edges
+
+    // Calculate vertical position (prefer above element)
     let tooltipTop: number;
+    let marginTop = 0;
 
     if (this.showBoxModel) {
       const computed = window.getComputedStyle(element);
-      const marginTop = parseFloat(computed.marginTop) || 0;
-      tooltipTop = rect.top - marginTop - tooltipHeight - 8;
-    } else {
-      tooltipTop = rect.top - tooltipHeight - 8;
+      marginTop = parseFloat(computed.marginTop) || 0;
     }
 
-    const useTop = tooltipTop > 0;
+    const spaceAbove = rect.top - marginTop - padding;
+    const spaceBelow = viewportHeight - rect.bottom - padding;
 
-    this.tooltip.style.left = `${rect.left}px`;
-    this.tooltip.style.top = useTop ? `${tooltipTop}px` : `${rect.bottom + 8}px`;
+    if (spaceAbove >= tooltipHeight + padding) {
+      // Place above element
+      tooltipTop = rect.top - marginTop - tooltipHeight - padding;
+    } else if (spaceBelow >= tooltipHeight + padding) {
+      // Place below element
+      tooltipTop = rect.bottom + padding;
+    } else {
+      // Not enough space above or below, place at top of viewport
+      tooltipTop = padding;
+    }
+
+    // Calculate horizontal position (prefer aligned with element left edge)
+    let tooltipLeft = rect.left;
+
+    // Check right edge overflow
+    if (tooltipLeft + tooltipWidth > viewportWidth - padding) {
+      // Shift left to fit within viewport
+      tooltipLeft = viewportWidth - tooltipWidth - padding;
+    }
+
+    // Check left edge overflow (in case we shifted too far, or element is near left edge)
+    if (tooltipLeft < padding) {
+      tooltipLeft = padding;
+    }
+
+    this.tooltip.style.left = `${tooltipLeft}px`;
+    this.tooltip.style.top = `${tooltipTop}px`;
     this.tooltip.style.display = 'block';
   }
 
@@ -510,5 +559,32 @@ export class HighlightOverlay {
   setColor(color: string): void {
     this.highlightColor = color;
     this.box.style.borderColor = color;
+  }
+
+  /**
+   * Shake the highlight to indicate bounds reached
+   */
+  shake(): void {
+    // Add shake class to all visible elements
+    const elements = [
+      this.box,
+      this.marginOverlay,
+      this.paddingOverlay,
+      this.marginLabels,
+      this.paddingLabels,
+      this.tooltip,
+    ];
+
+    elements.forEach((el) => {
+      el.classList.remove('shake'); // Reset if already shaking
+      // Force reflow to restart animation
+      void el.offsetWidth;
+      el.classList.add('shake');
+    });
+
+    // Remove class after animation completes
+    setTimeout(() => {
+      elements.forEach((el) => el.classList.remove('shake'));
+    }, 300);
   }
 }
