@@ -11,17 +11,13 @@ import type { Message } from '../shared/types';
 let floatingButton: FloatingButton;
 
 /**
- * Sync both button states based on inspector state
- * Redline and Ruler modes are mutually exclusive
+ * Sync button state based on inspector state
  */
 function syncButtonStates(): void {
   const isActive = inspector.getIsActive();
-  const isRulerMode = inspector.getIsRulerMode();
   
-  // Left button (redline) is active when inspector is on AND not in ruler mode
-  floatingButton.setRedlineActive(isActive && !isRulerMode);
-  // Right button (ruler) is active when inspector is on AND in ruler mode
-  floatingButton.setRulerActive(isActive && isRulerMode);
+  // Single button shows active when hybrid mode is on
+  floatingButton.setRedlineActive(isActive);
   
   chrome.runtime.sendMessage({
     type: 'STATE_CHANGED',
@@ -48,46 +44,26 @@ const inspector = new ElementInspector({
   onDeactivate: () => syncButtonStates(),
 });
 
-// Initialize floating button with mutually exclusive mode logic
+// Initialize floating button with hybrid mode toggle
 floatingButton = new FloatingButton({
   onToggleRedline: () => {
-    const isCurrentlyInRedlineMode = inspector.getIsActive() && !inspector.getIsRulerMode();
+    const isCurrentlyActive = inspector.getIsActive();
     
-    if (isCurrentlyInRedlineMode) {
-      // Turn off redline mode entirely
+    if (isCurrentlyActive) {
+      // Turn off hybrid mode
       inspector.deactivate();
+      inspector.deactivateHybridMode();
     } else {
-      // Turn on redline mode (switch from ruler if needed)
-      if (inspector.getIsRulerMode()) {
-        inspector.deactivateRulerMode();
-      }
-      if (!inspector.getIsActive()) {
-        inspector.activate();
-      }
-    }
-    
-    syncButtonStates();
-  },
-  onToggleRuler: () => {
-    const isCurrentlyInRulerMode = inspector.getIsActive() && inspector.getIsRulerMode();
-    
-    if (isCurrentlyInRulerMode) {
-      // Turn off ruler mode entirely
-      inspector.deactivate();
-      inspector.deactivateRulerMode(); // Reset the flag
-    } else {
-      // Turn on ruler mode (activates inspection if needed)
-      inspector.activateRulerMode();
-      if (!inspector.getIsActive()) {
-        inspector.activate();
-      }
+      // Turn on hybrid mode
+      inspector.activateHybridMode();
+      inspector.activate();
     }
     
     syncButtonStates();
   },
 });
 
-// Mount floating button and check enabled state
+// Mount floating button (starts hidden) and check enabled state
 floatingButton.mount();
 checkEnabledState();
 
@@ -99,19 +75,16 @@ checkEnabledState();
 chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) => {
   switch (message.type) {
     case 'TOGGLE_INSPECTION':
-      // Toggle redline mode (same logic as left button)
+      // Toggle hybrid mode
       {
-        const isCurrentlyInRedlineMode = inspector.getIsActive() && !inspector.getIsRulerMode();
+        const isCurrentlyActive = inspector.getIsActive();
         
-        if (isCurrentlyInRedlineMode) {
+        if (isCurrentlyActive) {
           inspector.deactivate();
+          inspector.deactivateHybridMode();
         } else {
-          if (inspector.getIsRulerMode()) {
-            inspector.deactivateRulerMode();
-          }
-          if (!inspector.getIsActive()) {
-            inspector.activate();
-          }
+          inspector.activateHybridMode();
+          inspector.activate();
         }
         
         syncButtonStates();
@@ -132,9 +105,7 @@ chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) =
         // Deactivate inspector if it's active
         if (inspector.getIsActive()) {
           inspector.deactivate();
-          if (inspector.getIsRulerMode()) {
-            inspector.deactivateRulerMode();
-          }
+          inspector.deactivateHybridMode();
           syncButtonStates();
         }
       }
@@ -147,52 +118,24 @@ chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) =
 
 // Also listen for keyboard shortcut directly (as backup)
 document.addEventListener('keydown', (e) => {
-  // Cmd+Shift+L (Mac) or Ctrl+Shift+L (Windows/Linux) - toggle redline mode
+  // Cmd+Shift+L (Mac) or Ctrl+Shift+L (Windows/Linux) - toggle hybrid mode
   // Check for both 'L' and 'l' since shift may affect the key value
   const isL = e.key === 'L' || e.key === 'l';
   if ((e.metaKey || e.ctrlKey) && e.shiftKey && isL) {
     e.preventDefault();
-    console.log('[Redline] Keyboard shortcut detected, toggling redline mode...');
+    console.log('[Redline] Keyboard shortcut detected, toggling hybrid mode...');
     
-    const isCurrentlyInRedlineMode = inspector.getIsActive() && !inspector.getIsRulerMode();
+    const isCurrentlyActive = inspector.getIsActive();
     
-    if (isCurrentlyInRedlineMode) {
+    if (isCurrentlyActive) {
       inspector.deactivate();
+      inspector.deactivateHybridMode();
     } else {
-      if (inspector.getIsRulerMode()) {
-        inspector.deactivateRulerMode();
-      }
-      if (!inspector.getIsActive()) {
-        inspector.activate();
-      }
+      inspector.activateHybridMode();
+      inspector.activate();
     }
     
     syncButtonStates();
-  }
-
-  // R key to toggle ruler mode
-  const isR = e.key === 'R' || e.key === 'r';
-  if (isR && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
-    // Only trigger if not typing in an input
-    const target = e.target as Element;
-    if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
-      e.preventDefault();
-      console.log('[Redline] R key detected, toggling ruler mode...');
-      
-      const isCurrentlyInRulerMode = inspector.getIsActive() && inspector.getIsRulerMode();
-      
-      if (isCurrentlyInRulerMode) {
-        inspector.deactivate();
-        inspector.deactivateRulerMode();
-      } else {
-        inspector.activateRulerMode();
-        if (!inspector.getIsActive()) {
-          inspector.activate();
-        }
-      }
-      
-      syncButtonStates();
-    }
   }
 });
 

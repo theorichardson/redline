@@ -10,15 +10,69 @@ export class LayerNavigator {
   private currentIndex = 0;
 
   /**
+   * Check if an element is visually visible to the user
+   * Filters out elements that are hidden via CSS
+   */
+  private isElementVisible(el: Element): boolean {
+    const computed = window.getComputedStyle(el);
+    
+    // Check visibility property
+    if (computed.visibility === 'hidden' || computed.visibility === 'collapse') {
+      return false;
+    }
+    
+    // Check opacity (fully transparent elements are not visible)
+    const opacity = parseFloat(computed.opacity);
+    if (opacity === 0) {
+      return false;
+    }
+    
+    // Check if element has zero dimensions (collapsed)
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) {
+      return false;
+    }
+    
+    // Check for clip-path: none or valid clip-path
+    // Elements with clip-path: inset(100%) or similar are fully clipped
+    const clipPath = computed.clipPath;
+    if (clipPath && clipPath !== 'none') {
+      // Check for common "fully hidden" clip-path patterns
+      if (
+        clipPath === 'inset(100%)' ||
+        clipPath === 'inset(50%)' ||
+        clipPath === 'polygon(0 0, 0 0, 0 0, 0 0)' ||
+        clipPath === 'circle(0)' ||
+        clipPath === 'circle(0px)' ||
+        clipPath === 'circle(0px at 50% 50%)'
+      ) {
+        return false;
+      }
+    }
+    
+    // Check for overflow: hidden with zero content area
+    // (element might have padding but no actual content visible)
+    if (computed.overflow === 'hidden') {
+      const contentWidth = rect.width - parseFloat(computed.paddingLeft) - parseFloat(computed.paddingRight);
+      const contentHeight = rect.height - parseFloat(computed.paddingTop) - parseFloat(computed.paddingBottom);
+      if (contentWidth <= 0 && contentHeight <= 0 && el.children.length === 0 && el.textContent?.trim() === '') {
+        return false;
+      }
+    }
+    
+    return true;
+  }
+
+  /**
    * Update the element stack at the given coordinates
-   * Filters out our own UI elements
+   * Filters out our own UI elements and hidden elements
    */
   updateAtPoint(x: number, y: number): void {
 
     // Get all elements at this point, from topmost to bottommost
     const elements = document.elementsFromPoint(x, y);
 
-    // Filter out Redline UI elements and html/body
+    // Filter out Redline UI elements, html/body, and hidden elements
     this.elementStack = elements.filter((el) => {
       // Skip our own UI (any element with data-redline-* attributes)
       if (
@@ -39,6 +93,10 @@ export class LayerNavigator {
       }
       // Skip html and body (rarely useful to inspect)
       if (el.tagName === 'HTML' || el.tagName === 'BODY') {
+        return false;
+      }
+      // Skip elements that are not visually visible
+      if (!this.isElementVisible(el)) {
         return false;
       }
       return true;

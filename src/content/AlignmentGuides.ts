@@ -4,6 +4,8 @@
  * Now supports interactive ruler lines for multi-element selection
  */
 
+import { getTooltipCSS } from './styles';
+
 interface AlignmentMatch {
   element: Element;
   type: 'top' | 'bottom' | 'left' | 'right' | 'centerX' | 'centerY';
@@ -39,6 +41,14 @@ export class AlignmentGuides {
   private rulerLines: RulerLine[] = [];
   private selectedLine: RulerLine | null = null;
   private hoveredLine: RulerLine | null = null;
+  private isShowingElementPreviews = false;
+  private isShiftPressed = false;
+  private isHybridMode = false;
+  private currentElement: Element | null = null; // Store element to re-render on shift toggle
+  
+  // Bound keyboard handlers
+  private boundHandleKeyDown: ((e: KeyboardEvent) => void) | null = null;
+  private boundHandleKeyUp: ((e: KeyboardEvent) => void) | null = null;
 
   constructor(callbacks: RulerLineCallbacks = {}) {
     this.callbacks = callbacks;
@@ -134,6 +144,26 @@ export class AlignmentGuides {
         opacity: 1;
       }
 
+      /* In hybrid mode, don't show hover effects by default */
+      .guide-line.hybrid-mode {
+        cursor: default;
+        pointer-events: auto;
+      }
+
+      .guide-line.hybrid-mode:hover {
+        opacity: 0.9;
+        cursor: pointer;
+      }
+
+      .guide-line.hybrid-mode.hovered {
+        opacity: 0.7;
+        cursor: pointer;
+      }
+
+      .guide-line.hybrid-mode.hovered:hover {
+        opacity: 0.9;
+      }
+
       /* Horizontal lines: 1px tall with 6px padding top/bottom for hit area */
       .guide-line-horizontal {
         height: 1px;
@@ -168,22 +198,25 @@ export class AlignmentGuides {
         opacity: 0.25;
       }
 
-      .guide-line-center:hover,
+      .guide-line-center:hover {
+        opacity: 0.6;
+      }
+
       .guide-line-center.hovered {
         opacity: 0.6;
       }
 
-      .guide-label {
-        position: fixed;
-        background: #1a1a2e;
-        color: #fff;
-        padding: 3px 6px;
-        border-radius: 3px;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        font-size: 11px;
-        white-space: nowrap;
-        pointer-events: none;
-        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+      /* In hybrid mode, center lines don't show hover by default */
+      .guide-line-center.hybrid-mode:hover {
+        opacity: 0.6;
+      }
+
+      .guide-line-center.hybrid-mode.hovered {
+        opacity: 0.6;
+      }
+
+      .guide-line-center.hybrid-mode.hovered:hover {
+        opacity: 0.6;
       }
 
       .guide-marker {
@@ -225,14 +258,33 @@ export class AlignmentGuides {
     if (!this.container.parentElement) {
       document.body.appendChild(this.container);
       console.log('[Redline] Alignment guides mounted');
+      
+      // Add global keyboard listeners for Shift key detection
+      this.boundHandleKeyDown = this.handleKeyDown.bind(this);
+      this.boundHandleKeyUp = this.handleKeyUp.bind(this);
+      document.addEventListener('keydown', this.boundHandleKeyDown, true);
+      document.addEventListener('keyup', this.boundHandleKeyUp, true);
     }
   }
 
   unmount(): void {
     this.container.remove();
+    
+    // Remove keyboard listeners
+    if (this.boundHandleKeyDown) {
+      document.removeEventListener('keydown', this.boundHandleKeyDown, true);
+      this.boundHandleKeyDown = null;
+    }
+    if (this.boundHandleKeyUp) {
+      document.removeEventListener('keyup', this.boundHandleKeyUp, true);
+      this.boundHandleKeyUp = null;
+    }
   }
 
   showGuides(element: Element): void {
+    // Store current element for re-rendering when Shift is toggled
+    this.currentElement = element;
+    
     // Clear previous guides but preserve selection state if same element
     this.linesContainer.innerHTML = '';
     this.labelsContainer.innerHTML = '';
@@ -249,17 +301,22 @@ export class AlignmentGuides {
     this.highlightBox.style.height = `${rect.height}px`;
     this.highlightBox.style.display = 'block';
     
-    // Find nearby elements and their alignment matches (for distance labels)
-    const matches = this.findAlignmentMatches(element, rect);
+    // In hybrid mode, only show rulers if Shift is pressed
+    const shouldShowRulers = !this.isHybridMode || this.isShiftPressed;
+    
+    if (shouldShowRulers) {
+      // Find nearby elements and their alignment matches (for distance labels)
+      const matches = this.findAlignmentMatches(element, rect);
 
-    // Draw ruler lines from all edges (now interactive with intersection-based selection)
-    this.drawRulerLines(rect);
+      // Draw ruler lines from all edges (now interactive with intersection-based selection)
+      this.drawRulerLines(rect);
 
-    // Draw alignment matches
-    this.drawAlignmentMatches(rect, matches);
+      // Draw alignment matches
+      this.drawAlignmentMatches(rect, matches);
 
-    // Draw distance labels
-    this.drawDistanceLabels(rect, matches);
+      // Draw distance labels
+      this.drawDistanceLabels(rect, matches);
+    }
   }
 
   hide(): void {
@@ -269,10 +326,24 @@ export class AlignmentGuides {
     this.rulerLines = [];
     this.selectedLine = null;
     this.hoveredLine = null;
+    this.currentElement = null;
   }
 
   getSelectedLine(): RulerLine | null {
     return this.selectedLine;
+  }
+
+  setHybridMode(isHybrid: boolean): void {
+    this.isHybridMode = isHybrid;
+    
+    // Update all existing ruler lines to add/remove hybrid-mode class
+    this.rulerLines.forEach(line => {
+      if (isHybrid) {
+        line.lineElement.classList.add('hybrid-mode');
+      } else {
+        line.lineElement.classList.remove('hybrid-mode');
+      }
+    });
   }
 
   clearSelection(): void {
@@ -292,9 +363,69 @@ export class AlignmentGuides {
       this.hoveredLine = null;
     }
 
-    // Remove preview highlights
+    this.clearElementPreviews();
+  }
+
+  /**
+   * Clear only the element preview highlights, without affecting hover state
+   */
+  private clearElementPreviews(): void {
     const previews = this.shadow.querySelectorAll('.element-highlight-preview');
     previews.forEach((h) => h.remove());
+  }
+
+  private handleKeyDown(e: KeyboardEvent): void {
+    if (e.key === 'Shift' && !this.isShiftPressed) {
+      this.isShiftPressed = true;
+      
+      // In hybrid mode, show rulers when Shift is pressed
+      if (this.isHybridMode && this.currentElement) {
+        this.showGuides(this.currentElement);
+        return;
+      }
+      
+      // In ruler mode, show element previews if hovering over a line
+      if (!this.isHybridMode && this.hoveredLine && !this.selectedLine) {
+        this.showElementPreviews(this.hoveredLine);
+      }
+    }
+  }
+
+  private handleKeyUp(e: KeyboardEvent): void {
+    if (e.key === 'Shift' && this.isShiftPressed) {
+      this.isShiftPressed = false;
+      
+      // In hybrid mode, hide rulers when Shift is released
+      if (this.isHybridMode && this.currentElement) {
+        this.showGuides(this.currentElement);
+        return;
+      }
+      
+      // In ruler mode, hide element previews
+      if (!this.isHybridMode && this.hoveredLine && !this.selectedLine) {
+        this.hideElementPreviews();
+      }
+    }
+  }
+
+  private showElementPreviews(line: RulerLine): void {
+    if (this.isShowingElementPreviews) return;
+    
+    // Recalculate elements to ensure current list
+    line.elements = this.getElementsIntersectingLine(line.orientation, line.position);
+    this.isShowingElementPreviews = true;
+
+    // Show preview highlights for all elements on this line
+    line.elements.forEach((el) => {
+      this.highlightElementPreview(el);
+    });
+  }
+
+  private hideElementPreviews(): void {
+    if (!this.isShowingElementPreviews) return;
+    
+    this.clearElementPreviews();
+    this.isShowingElementPreviews = false;
   }
 
   private drawRulerLines(rect: DOMRect): void {
@@ -479,6 +610,10 @@ export class AlignmentGuides {
     if (styleType === 'center') {
       line.classList.add('guide-line-center');
     }
+    
+    if (this.isHybridMode) {
+      line.classList.add('hybrid-mode');
+    }
 
     if (orientation === 'horizontal') {
       line.style.top = `${position}px`;
@@ -499,7 +634,7 @@ export class AlignmentGuides {
     };
     this.rulerLines.push(rulerLine);
 
-    // Add hover handlers for preview
+    // Add hover handlers for preview (check global Shift state)
     line.addEventListener('mouseenter', () => {
       this.handleLineHover(rulerLine);
     });
@@ -522,20 +657,23 @@ export class AlignmentGuides {
     // Don't show hover preview if a line is already selected
     if (this.selectedLine) return;
 
+    // In hybrid mode, only allow hover effects when Shift is pressed
+    if (this.isHybridMode && !this.isShiftPressed) {
+      return;
+    }
+
     // Clear previous hover state
     this.clearHoverHighlights();
+    this.isShowingElementPreviews = false;
 
     if (line) {
-      // Recalculate elements on hover to ensure current list
-      line.elements = this.getElementsIntersectingLine(line.orientation, line.position);
-      
       this.hoveredLine = line;
       line.lineElement.classList.add('hovered');
 
-      // Show preview highlights for all elements on this line
-      line.elements.forEach((el) => {
-        this.highlightElementPreview(el);
-      });
+      // Show element previews if Shift is currently held (only in ruler mode)
+      if (this.isShiftPressed && !this.isHybridMode) {
+        this.showElementPreviews(line);
+      }
     }
 
     // Notify callback
@@ -775,11 +913,16 @@ export class AlignmentGuides {
   }
 
   private createLabel(text: string, x: number, y: number): void {
+    // Create label with unified styling from shared styles
     const label = document.createElement('div');
     label.className = 'guide-label';
     label.textContent = text;
-    label.style.left = `${x}px`;
-    label.style.top = `${y}px`;
+    label.style.cssText = `
+      position: fixed;
+      left: ${x}px;
+      top: ${y}px;
+      ${getTooltipCSS('small')}
+    `;
     this.labelsContainer.appendChild(label);
   }
 }

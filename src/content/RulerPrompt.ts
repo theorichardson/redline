@@ -70,14 +70,6 @@ export class RulerPrompt {
         display: flex;
       }
 
-      .prompt-label {
-        font-size: 11px;
-        color: #999;
-        font-weight: 500;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-      }
-
       .prompt-input {
         width: 100%;
         background: #2a2a2a;
@@ -107,6 +99,7 @@ export class RulerPrompt {
         display: flex;
         gap: 8px;
         justify-content: flex-end;
+        align-items: center;
       }
 
       .btn {
@@ -149,23 +142,23 @@ export class RulerPrompt {
       }
 
       .alignment-info {
+        flex: 1;
+        background: transparent;
+        border: none;
+        color: #ccc;
+        padding: 8px 12px;
+        border-radius: 8px;
         font-size: 11px;
-        color: #666;
-        padding: 6px 8px;
-        background: #222;
-        border-radius: 6px;
-      }
-
-      .alignment-info strong {
-        color: #999;
+        font-weight: 500;
+        line-height: 1.4;
+        margin-right: auto;
+        min-width: 0;
       }
     `;
   }
 
   private getTemplate(): string {
     return `
-      <div class="prompt-label">Alignment Prompt</div>
-      <div class="alignment-info" id="alignment-info"></div>
       <textarea
         class="prompt-input"
         id="prompt-input"
@@ -173,6 +166,7 @@ export class RulerPrompt {
         rows="2"
       ></textarea>
       <div class="button-row">
+        <div class="alignment-info" id="alignment-info"></div>
         <button class="btn" id="cancel-btn">Cancel</button>
         <button class="btn primary" id="copy-btn" disabled>Copy</button>
       </div>
@@ -243,7 +237,7 @@ export class RulerPrompt {
     // Set alignment info
     const infoEl = this.shadow.getElementById('alignment-info');
     if (infoEl) {
-      infoEl.innerHTML = `<strong>${elementCount} elements</strong> on ${alignmentType} line`;
+      infoEl.innerHTML = `${elementCount} elements on ${alignmentType}`;
     }
 
     // Focus input

@@ -22,6 +22,7 @@ export interface ElementInspectorCallbacks {
 export class ElementInspector {
   private isActive = false;
   private isRulerMode = false; // When true, show alignment guides instead of details
+  private isHybridMode = false; // When true, show both alignment guides AND details
   private isLocked = false; // When true, don't follow mouse (element selected)
   private callbacks: ElementInspectorCallbacks;
 
@@ -49,6 +50,7 @@ export class ElementInspector {
   private boundHandleClick: (e: MouseEvent) => void;
   private boundHandleWheel: (e: WheelEvent) => void;
   private boundHandleKeyDown: (e: KeyboardEvent) => void;
+  private boundHandleKeyUp: (e: KeyboardEvent) => void;
   private boundHandleScroll: () => void;
 
   // Scroll position-based navigation
@@ -56,6 +58,9 @@ export class ElementInspector {
   private readonly WHEEL_THRESHOLD = 50; // Pixels of scroll needed to trigger navigation
   private hasShownBoundsShake = false; // Prevents repeated shake at bounds
   private boundsShakeResetTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  // Element freeze state (hold Shift to freeze current element while navigating to ruler lines)
+  private isElementFrozen = false;
 
   constructor(callbacks: ElementInspectorCallbacks = {}) {
     this.callbacks = callbacks;
@@ -114,6 +119,7 @@ export class ElementInspector {
     this.boundHandleClick = this.handleClick.bind(this);
     this.boundHandleWheel = this.handleWheel.bind(this);
     this.boundHandleKeyDown = this.handleKeyDown.bind(this);
+    this.boundHandleKeyUp = this.handleKeyUp.bind(this);
     this.boundHandleScroll = this.handleScroll.bind(this);
   }
 
@@ -126,11 +132,19 @@ export class ElementInspector {
     this.isActive = true;
     this.isLocked = false;
 
-    // Mount UI components
+    // Mount UI components based on mode
     if (this.isRulerMode) {
+      // Ruler mode: only show alignment guides
+      this.alignmentGuides.mount();
+      this.rulerPrompt.mount();
+    } else if (this.isHybridMode) {
+      // Hybrid mode: show both alignment guides AND details panel
+      this.highlightOverlay.mount();
+      this.infoPanel.mount();
       this.alignmentGuides.mount();
       this.rulerPrompt.mount();
     } else {
+      // Normal redline mode: only show details panel
       this.highlightOverlay.mount();
       this.infoPanel.mount();
     }
@@ -141,6 +155,7 @@ export class ElementInspector {
     document.addEventListener('click', this.boundHandleClick, true);
     document.addEventListener('wheel', this.boundHandleWheel, { passive: false, capture: true });
     document.addEventListener('keydown', this.boundHandleKeyDown, true);
+    document.addEventListener('keyup', this.boundHandleKeyUp, true);
     window.addEventListener('scroll', this.boundHandleScroll, true);
 
     // Set cursor
@@ -163,9 +178,10 @@ export class ElementInspector {
     document.removeEventListener('click', this.boundHandleClick, true);
     document.removeEventListener('wheel', this.boundHandleWheel, true);
     document.removeEventListener('keydown', this.boundHandleKeyDown, true);
+    document.removeEventListener('keyup', this.boundHandleKeyUp, true);
     window.removeEventListener('scroll', this.boundHandleScroll, true);
 
-    // Hide UI
+    // Hide UI (including tooltips)
     this.highlightOverlay.hide();
     this.alignmentGuides.hide();
     this.infoPanel.hide();
@@ -184,6 +200,7 @@ export class ElementInspector {
     this.currentElement = null;
     this.currentElementInfo = null;
     this.selectedRulerLine = null;
+    this.isElementFrozen = false;
     this.layerNavigator.reset();
     this.accumulatedWheelDelta = 0;
     this.hasShownBoundsShake = false;
@@ -294,13 +311,73 @@ export class ElementInspector {
     return this.isRulerMode;
   }
 
+  /**
+   * Activate hybrid mode (combination of redline and ruler)
+   */
+  activateHybridMode(): void {
+    if (this.isHybridMode) return;
+
+    this.isHybridMode = true;
+    this.isRulerMode = false; // Ensure ruler mode is off
+
+    // Set hybrid mode on alignment guides
+    this.alignmentGuides.setHybridMode(true);
+
+    // If inspector is active, switch to hybrid display
+    if (this.isActive) {
+      // Mount both components
+      this.highlightOverlay.mount();
+      this.infoPanel.mount();
+      this.alignmentGuides.mount();
+      this.rulerPrompt.mount();
+
+      // Show both overlays for current element
+      if (this.currentElement) {
+        this.highlightOverlay.highlight(this.currentElement);
+        this.alignmentGuides.showGuides(this.currentElement);
+      }
+    }
+
+    console.log('[Redline] Hybrid mode activated');
+  }
+
+  /**
+   * Deactivate hybrid mode
+   */
+  deactivateHybridMode(): void {
+    if (!this.isHybridMode) return;
+
+    this.isHybridMode = false;
+
+    // Set hybrid mode off on alignment guides
+    this.alignmentGuides.setHybridMode(false);
+
+    // Hide and unmount alignment guides (keep redline components)
+    this.alignmentGuides.hide();
+    this.alignmentGuides.unmount();
+    this.rulerPrompt.hide();
+    this.rulerPrompt.unmount();
+
+    // Clear selection state
+    this.selectedRulerLine = null;
+
+    console.log('[Redline] Hybrid mode deactivated');
+  }
+
+  /**
+   * Check if hybrid mode is active
+   */
+  getIsHybridMode(): boolean {
+    return this.isHybridMode;
+  }
+
   // --- Event Handlers ---
 
   private handleMouseMove(e: MouseEvent): void {
     if (!this.isActive || this.isLocked) return;
 
-    // In ruler mode, check if we're interacting with ruler UI
-    if (this.isRulerMode) {
+    // In ruler or hybrid mode, check if we're interacting with ruler UI
+    if (this.isRulerMode || this.isHybridMode) {
       const target = e.target as Element;
       
       // Don't update element if hovering over ruler lines or prompt
@@ -317,8 +394,9 @@ export class ElementInspector {
         return;
       }
       
-      // If CMD/Meta key is held, lock the rulers to current element
-      if (e.metaKey || e.ctrlKey) {
+      // If element is frozen (Shift held) or CMD/Meta key is held, keep current element
+      // This allows user to navigate to ruler lines without changing the highlighted element
+      if (this.isElementFrozen || e.metaKey || e.ctrlKey || e.shiftKey) {
         return;
       }
     }
@@ -334,6 +412,10 @@ export class ElementInspector {
       // Show guides or highlight based on mode
       if (this.isRulerMode) {
         this.alignmentGuides.showGuides(element);
+      } else if (this.isHybridMode) {
+        // Show both ruler lines and highlight overlay
+        this.alignmentGuides.showGuides(element);
+        this.highlightOverlay.highlight(element, false);
       } else {
         this.highlightOverlay.highlight(element, false); // Simple highlight on hover
       }
@@ -370,6 +452,16 @@ export class ElementInspector {
         this.selectedRulerLine = null;
       }
       return;
+    }
+
+    // In hybrid mode, allow element selection while still showing ruler guides
+    if (this.isHybridMode) {
+      if (this.selectedRulerLine) {
+        this.rulerPrompt.hide();
+        this.alignmentGuides.clearSelection();
+        this.selectedRulerLine = null;
+      }
+      // Continue to element selection below
     }
 
     // Save click position for panel positioning
@@ -454,6 +546,10 @@ export class ElementInspector {
       // Show guides or highlight based on mode
       if (this.isRulerMode) {
         this.alignmentGuides.showGuides(element);
+      } else if (this.isHybridMode) {
+        // Hybrid mode: show both
+        this.alignmentGuides.showGuides(element);
+        this.highlightOverlay.highlight(element, this.isLocked);
       } else {
         this.highlightOverlay.highlight(element, this.isLocked); // Box model when locked
       }
@@ -468,9 +564,15 @@ export class ElementInspector {
   private handleKeyDown(e: KeyboardEvent): void {
     if (!this.isActive) return;
 
-    // Check if typing in input
+    // Check if typing in input (check both direct target and composed path for Shadow DOM)
     const target = e.target as Element;
-    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+    const composedPath = e.composedPath();
+    const actualTarget = composedPath[0] as Element;
+    
+    const isTypingInInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' ||
+        actualTarget.tagName === 'INPUT' || actualTarget.tagName === 'TEXTAREA';
+    
+    if (isTypingInInput) {
       // Only handle Escape in inputs
       if (e.key === 'Escape') {
         this.handlePanelClose();
@@ -480,10 +582,12 @@ export class ElementInspector {
 
     switch (e.key) {
       case 'Escape':
-        // In ruler mode, Escape cancels selection first
-        if (this.isRulerMode && this.selectedRulerLine) {
+        // In ruler or hybrid mode, Escape cancels selection first
+        if ((this.isRulerMode || this.isHybridMode) && this.selectedRulerLine) {
           this.rulerPrompt.hide();
           this.alignmentGuides.clearSelection();
+          this.alignmentGuides.hide();
+          this.highlightOverlay.hide();
           this.selectedRulerLine = null;
           e.preventDefault();
           return;
@@ -493,6 +597,8 @@ export class ElementInspector {
           // Unlock and go back to hover mode
           this.isLocked = false;
           this.infoPanel.hide();
+          this.highlightOverlay.hide();
+          this.alignmentGuides.hide();
         } else {
           // Deactivate entirely
           this.deactivate();
@@ -518,6 +624,41 @@ export class ElementInspector {
           this.selectElement(this.currentElement);
         }
         break;
+
+      case 'Shift':
+        // In ruler or hybrid mode, Shift freezes current element to allow clicking on ruler lines
+        if ((this.isRulerMode || this.isHybridMode) && !this.isElementFrozen && this.currentElement) {
+          e.preventDefault();
+          this.isElementFrozen = true;
+          // Show visual feedback - update highlight to show "frozen" state
+          this.highlightOverlay.setFrozen(true);
+          console.log('[Redline] Element frozen (Shift) - move to ruler lines without losing selection');
+        }
+        break;
+    }
+  }
+
+  private handleKeyUp(e: KeyboardEvent): void {
+    if (!this.isActive) return;
+
+    // Check if typing in input (check both direct target and composed path for Shadow DOM)
+    const target = e.target as Element;
+    const composedPath = e.composedPath();
+    const actualTarget = composedPath[0] as Element;
+    
+    const isTypingInInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' ||
+        actualTarget.tagName === 'INPUT' || actualTarget.tagName === 'TEXTAREA';
+    
+    if (isTypingInInput) {
+      return;
+    }
+
+    if (e.key === 'Shift') {
+      if (this.isElementFrozen) {
+        this.isElementFrozen = false;
+        this.highlightOverlay.setFrozen(false);
+        console.log('[Redline] Element unfrozen');
+      }
     }
   }
 
@@ -531,6 +672,10 @@ export class ElementInspector {
     if (this.currentElement) {
       if (this.isRulerMode) {
         this.alignmentGuides.showGuides(this.currentElement);
+      } else if (this.isHybridMode) {
+        // Hybrid mode: update both
+        this.alignmentGuides.showGuides(this.currentElement);
+        this.highlightOverlay.highlight(this.currentElement, this.isLocked);
       } else {
         this.highlightOverlay.highlight(this.currentElement, this.isLocked);
       }
@@ -542,7 +687,14 @@ export class ElementInspector {
   private selectElement(element: Element): void {
     this.isLocked = true;
     this.currentElement = element;
-    this.highlightOverlay.highlight(element, true); // Show box model when selected
+    
+    // In hybrid mode, show both highlight and guides
+    if (this.isHybridMode) {
+      this.highlightOverlay.highlight(element, true); // Show box model when selected
+      this.alignmentGuides.showGuides(element);
+    } else {
+      this.highlightOverlay.highlight(element, true); // Show box model when selected
+    }
 
     // Build element info
     this.currentElementInfo = this.buildElementInfo(element);
@@ -581,6 +733,10 @@ export class ElementInspector {
       // Show guides or highlight based on mode
       if (this.isRulerMode) {
         this.alignmentGuides.showGuides(element);
+      } else if (this.isHybridMode) {
+        // Show both ruler guides and highlight
+        this.alignmentGuides.showGuides(element);
+        this.highlightOverlay.highlight(element, this.isLocked);
       } else {
         this.highlightOverlay.highlight(element, this.isLocked); // Box model when locked
       }

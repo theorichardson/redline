@@ -1,4 +1,5 @@
 import type { ElementInfo, Annotation, AncestorNode } from '../shared/types';
+import { CSSExplainer } from './CSSExplainer';
 
 export interface InfoPanelCallbacks {
   onAddAnnotation: (feedback: string) => void;
@@ -301,6 +302,54 @@ export class InfoPanel {
         color: #444;
         margin: 0 4px;
       }
+
+      /* CSS Explainer section */
+      .css-explainer {
+        margin-top: 12px;
+        padding-top: 8px;
+        border-top: 1px solid #333;
+      }
+
+      .css-explainer-title {
+        font-size: 11px;
+        font-weight: 600;
+        color: #999;
+        margin-bottom: 8px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .css-prop-explanation {
+        margin-bottom: 8px;
+        padding: 6px 8px;
+        background: #1a1a1a;
+        border-radius: 4px;
+      }
+
+      .css-prop-explanation:last-child {
+        margin-bottom: 0;
+      }
+
+      .css-prop-name {
+        font-size: 11px;
+        font-weight: 600;
+        color: #e63946;
+        margin-bottom: 2px;
+        font-family: 'SF Mono', Monaco, monospace;
+      }
+
+      .css-prop-value {
+        font-size: 11px;
+        color: #6c9bcf;
+        margin-bottom: 4px;
+        font-family: 'SF Mono', Monaco, monospace;
+      }
+
+      .css-prop-description {
+        font-size: 11px;
+        color: #aaa;
+        line-height: 1.5;
+      }
     `;
   }
 
@@ -334,6 +383,8 @@ export class InfoPanel {
         <div class="detail-section">
           <div class="structure-path" id="structure-path"></div>
         </div>
+
+        <div class="css-explainer" id="css-explainer"></div>
       </div>
     `;
   }
@@ -507,6 +558,30 @@ export class InfoPanel {
           this.callbacks.onBreadcrumbClick(index);
         });
       });
+    }
+
+    // CSS Property Explainer
+    const cssExplainer = this.shadow.getElementById('css-explainer');
+    if (cssExplainer) {
+      const explanations = CSSExplainer.generateExplanations(elementInfo.computedStyles as unknown as Record<string, string | undefined>);
+      if (explanations.length > 0) {
+        const explanationHTML = explanations.map(exp => {
+          return `
+            <div class="css-prop-explanation">
+              <div class="css-prop-name">${exp.property}</div>
+              <div class="css-prop-value">${exp.value}</div>
+              <div class="css-prop-description">${exp.description}</div>
+            </div>
+          `;
+        }).join('');
+        
+        cssExplainer.innerHTML = `
+          <div class="css-explainer-title">Property Explanations</div>
+          ${explanationHTML}
+        `;
+      } else {
+        cssExplainer.innerHTML = '';
+      }
     }
 
     // Annotation input

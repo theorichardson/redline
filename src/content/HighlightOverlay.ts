@@ -1,3 +1,5 @@
+import { Tooltip, createTooltipContent } from './Tooltip';
+
 /**
  * Box model values parsed from computed styles
  */
@@ -16,7 +18,8 @@ export class HighlightOverlay {
   private container: HTMLElement;
   private shadow: ShadowRoot;
   private box: HTMLElement;
-  private tooltip: HTMLElement;
+  private tooltip: Tooltip;
+  private frozenIndicator: HTMLElement;
 
   // Box model overlays
   private marginOverlay: HTMLElement;
@@ -30,6 +33,7 @@ export class HighlightOverlay {
 
   private highlightColor = '#e63946';
   private showBoxModel = false;
+  private isFrozen = false;
 
   // Box model colors - very subtle, doesn't obscure content
   private readonly MARGIN_COLOR = 'rgba(255, 155, 120, 0.25)';
@@ -79,9 +83,13 @@ export class HighlightOverlay {
     this.box = document.createElement('div');
     this.box.className = 'redline-box';
 
-    // Tooltip
-    this.tooltip = document.createElement('div');
-    this.tooltip.className = 'redline-tooltip';
+    // Tooltip - unified component
+    this.tooltip = new Tooltip();
+
+    // Frozen indicator (shows when Space is held)
+    this.frozenIndicator = document.createElement('div');
+    this.frozenIndicator.className = 'frozen-indicator';
+    this.frozenIndicator.textContent = '⎵ Frozen';
 
     // Append in order (back to front)
     this.shadow.appendChild(this.marginOverlay);
@@ -91,7 +99,7 @@ export class HighlightOverlay {
     this.shadow.appendChild(this.marginLabels);
     this.shadow.appendChild(this.paddingLabels);
     this.shadow.appendChild(this.box);
-    this.shadow.appendChild(this.tooltip);
+    this.shadow.appendChild(this.frozenIndicator);
   }
 
   private getStyles(): string {
@@ -155,38 +163,6 @@ export class HighlightOverlay {
         color: #fff;
       }
 
-      .redline-tooltip {
-        position: fixed;
-        background: #1a1a2e;
-        color: #fff;
-        padding: 6px 10px;
-        border-radius: 4px;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        font-size: 12px;
-        white-space: nowrap;
-        z-index: 2147483647;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-        pointer-events: none;
-        display: none;
-      }
-
-      .redline-tooltip .tag {
-        color: #ff6b9d;
-      }
-
-      .redline-tooltip .id {
-        color: #ffd93d;
-      }
-
-      .redline-tooltip .class {
-        color: #6bcf7f;
-      }
-
-      .redline-tooltip .dims {
-        color: #8b8b9a;
-        margin-left: 8px;
-      }
-
       @keyframes redline-shake {
         0%, 100% { transform: translateX(0); }
         20% { transform: translateX(-3px); }
@@ -200,6 +176,32 @@ export class HighlightOverlay {
       .box-labels.shake {
         animation: redline-shake 0.3s ease-in-out;
       }
+
+      /* Frozen state - dashed border to indicate element is locked */
+      .redline-box.frozen {
+        border-style: dashed;
+        border-color: #ffd93d;
+      }
+
+      .frozen-indicator {
+        position: fixed;
+        background: #ffd93d;
+        color: #1a1a2e;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        z-index: 2147483647;
+        pointer-events: none;
+        display: none;
+      }
+
+      .frozen-indicator.visible {
+        display: block;
+      }
     `;
   }
 
@@ -208,9 +210,15 @@ export class HighlightOverlay {
       document.body.appendChild(this.container);
       console.log('[Redline] Overlay mounted');
     }
+    // Recreate tooltip if it was destroyed
+    if (!this.tooltip) {
+      this.tooltip = new Tooltip();
+    }
   }
 
   unmount(): void {
+    this.tooltip.destroy();
+    this.tooltip = null as any; // Mark as destroyed
     this.container.remove();
   }
 
@@ -491,68 +499,49 @@ export class HighlightOverlay {
     const width = Math.round(rect.width);
     const height = Math.round(rect.height);
 
-    this.tooltip.innerHTML = `
-      <span class="tag">&lt;${tag}&gt;</span>${id ? `<span class="id">${id}</span>` : ''}${classes ? `<span class="class">${classes}</span>` : ''}
-      <span class="dims">${width} × ${height}</span>
-    `;
+    // Build element name (tag + id + classes)
+    let elementName = `<${tag}>`;
+    if (id) elementName += id;
+    if (classes) elementName += classes;
 
-    // Show tooltip temporarily to measure its dimensions
-    this.tooltip.style.visibility = 'hidden';
-    this.tooltip.style.display = 'block';
-    const tooltipRect = this.tooltip.getBoundingClientRect();
-    const tooltipWidth = tooltipRect.width;
-    const tooltipHeight = tooltipRect.height;
-    this.tooltip.style.visibility = '';
+    // Create tooltip content with formatted parts
+    const content = createTooltipContent([
+      { value: elementName },
+      { value: `${width} × ${height}` }
+    ]);
 
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    const padding = 8; // Minimum distance from viewport edges
-
-    // Calculate vertical position (prefer above element)
-    let tooltipTop: number;
-    let marginTop = 0;
-
+    // Calculate target rect including margin if showing box model
+    let targetRect = rect;
     if (this.showBoxModel) {
       const computed = window.getComputedStyle(element);
-      marginTop = parseFloat(computed.marginTop) || 0;
+      const marginTop = parseFloat(computed.marginTop) || 0;
+      const marginBottom = parseFloat(computed.marginBottom) || 0;
+      const marginLeft = parseFloat(computed.marginLeft) || 0;
+      const marginRight = parseFloat(computed.marginRight) || 0;
+
+      targetRect = new DOMRect(
+        rect.left - marginLeft,
+        rect.top - marginTop,
+        rect.width + marginLeft + marginRight,
+        rect.height + marginTop + marginBottom
+      );
     }
 
-    const spaceAbove = rect.top - marginTop - padding;
-    const spaceBelow = viewportHeight - rect.bottom - padding;
-
-    if (spaceAbove >= tooltipHeight + padding) {
-      // Place above element
-      tooltipTop = rect.top - marginTop - tooltipHeight - padding;
-    } else if (spaceBelow >= tooltipHeight + padding) {
-      // Place below element
-      tooltipTop = rect.bottom + padding;
-    } else {
-      // Not enough space above or below, place at top of viewport
-      tooltipTop = padding;
-    }
-
-    // Calculate horizontal position (prefer aligned with element left edge)
-    let tooltipLeft = rect.left;
-
-    // Check right edge overflow
-    if (tooltipLeft + tooltipWidth > viewportWidth - padding) {
-      // Shift left to fit within viewport
-      tooltipLeft = viewportWidth - tooltipWidth - padding;
-    }
-
-    // Check left edge overflow (in case we shifted too far, or element is near left edge)
-    if (tooltipLeft < padding) {
-      tooltipLeft = padding;
-    }
-
-    this.tooltip.style.left = `${tooltipLeft}px`;
-    this.tooltip.style.top = `${tooltipTop}px`;
-    this.tooltip.style.display = 'block';
+    // Show tooltip with smart positioning
+    this.tooltip.showSmart({
+      content,
+      targetRect,
+      preferredPosition: 'top',
+      size: 'medium',
+      variant: 'dark'
+    });
   }
 
   hide(): void {
     this.box.style.display = 'none';
-    this.tooltip.style.display = 'none';
+    this.tooltip.hide();
+    this.frozenIndicator.classList.remove('visible');
+    this.box.classList.remove('frozen');
     this.hideBoxModelOverlay();
   }
 
@@ -572,7 +561,6 @@ export class HighlightOverlay {
       this.paddingOverlay,
       this.marginLabels,
       this.paddingLabels,
-      this.tooltip,
     ];
 
     elements.forEach((el) => {
@@ -586,5 +574,43 @@ export class HighlightOverlay {
     setTimeout(() => {
       elements.forEach((el) => el.classList.remove('shake'));
     }, 300);
+  }
+
+  /**
+   * Set the frozen state (when Space is held to lock element selection)
+   */
+  setFrozen(frozen: boolean): void {
+    if (this.isFrozen === frozen) return; // No change
+    this.isFrozen = frozen;
+    
+    if (frozen) {
+      this.box.classList.add('frozen');
+      this.frozenIndicator.classList.add('visible');
+      
+      // Position the frozen indicator near the box
+      const boxTop = parseFloat(this.box.style.top) || 0;
+      const boxLeft = parseFloat(this.box.style.left) || 0;
+      const boxWidth = parseFloat(this.box.style.width) || 0;
+      
+      // Position at top-right of the box
+      this.frozenIndicator.style.top = `${boxTop - 24}px`;
+      this.frozenIndicator.style.left = `${boxLeft + boxWidth - 60}px`;
+      
+      // Ensure it stays in viewport
+      const viewportWidth = window.innerWidth;
+      const indicatorLeft = parseFloat(this.frozenIndicator.style.left);
+      if (indicatorLeft + 60 > viewportWidth) {
+        this.frozenIndicator.style.left = `${viewportWidth - 68}px`;
+      }
+      if (indicatorLeft < 8) {
+        this.frozenIndicator.style.left = '8px';
+      }
+      if (boxTop < 32) {
+        this.frozenIndicator.style.top = `${boxTop + parseFloat(this.box.style.height) + 8}px`;
+      }
+    } else {
+      this.box.classList.remove('frozen');
+      this.frozenIndicator.classList.remove('visible');
+    }
   }
 }
