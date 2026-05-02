@@ -116,6 +116,11 @@ export class RulerPrompt {
         display: flex;
         align-items: center;
         justify-content: center;
+        outline: none;
+      }
+
+      .btn:focus-visible {
+        outline: none;
       }
 
       .btn:hover {
@@ -237,7 +242,7 @@ export class RulerPrompt {
     // Set alignment info
     const infoEl = this.shadow.getElementById('alignment-info');
     if (infoEl) {
-      infoEl.innerHTML = `${elementCount} elements on ${alignmentType}`;
+      infoEl.textContent = `${elementCount} elements on ${alignmentType}`;
     }
 
     // Focus input

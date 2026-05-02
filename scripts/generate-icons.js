@@ -1,11 +1,12 @@
 /**
- * Generate placeholder icons for the extension
+ * Generate placeholder PNG icons for the extension
  * Run with: node scripts/generate-icons.js
  */
 
-import { writeFileSync, mkdirSync, existsSync } from 'fs';
+import { mkdirSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import sharp from 'sharp';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const iconsDir = join(__dirname, '..', 'public', 'icons');
@@ -25,15 +26,16 @@ function generateSVG(size) {
 </svg>`;
 }
 
-// Write SVG files (these can be converted to PNG using browser or tools)
+// Write PNG files using sharp
 const sizes = [16, 48, 128];
 
-sizes.forEach((size) => {
-  const svg = generateSVG(size);
-  const path = join(iconsDir, `icon${size}.svg`);
-  writeFileSync(path, svg);
-  console.log(`Created: ${path}`);
-});
+await Promise.all(
+  sizes.map(async (size) => {
+    const svg = generateSVG(size);
+    const outputPath = join(iconsDir, `icon${size}.png`);
+    await sharp(Buffer.from(svg)).png().toFile(outputPath);
+    console.log(`Created: ${outputPath}`);
+  })
+);
 
-console.log('\nSVG icons created. Convert to PNG for Chrome extension.');
-console.log('You can use: https://svgtopng.com/ or similar tool');
+console.log('\nPNG icons created for Chrome extension.');

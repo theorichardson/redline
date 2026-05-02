@@ -73,6 +73,11 @@
       background: #d62839;
     }
 
+    .activate-btn:focus,
+    .activate-btn:focus-visible {
+      outline: none;
+    }
+
     .activate-btn.active {
       background: #2a9d8f;
     }
@@ -181,6 +186,11 @@
     .toggle-switch.active::after {
       transform: translateX(20px);
     }
+
+    .toggle-switch:focus,
+    .toggle-switch:focus-visible {
+      outline: none;
+    }
   </style>
 </head>
 <body>
@@ -209,8 +219,14 @@
         <span class="shortcut-label">Toggle Inspector</span>
         <div class="shortcut-keys">
           <kbd>⌘</kbd><kbd>⇧</kbd><kbd>L</kbd>
+          <span style="opacity: 0.7; margin: 0 4px;">or</span>
+          <kbd>⌥</kbd><kbd>⇧</kbd><kbd>L</kbd>
         </div>
       </div>
+      <p class="hint" style="font-size: 11px; opacity: 0.75; margin-top: 8px; line-height: 1.35;">
+        If a shortcut does nothing, another app or extension may be using it. Assign Redline in
+        <strong>chrome://extensions/shortcuts</strong>.
+      </p>
       <div class="shortcut">
         <span class="shortcut-label">Navigate Layers</span>
         <div class="shortcut-keys">

@@ -59,8 +59,14 @@ export class ElementInspector {
   private hasShownBoundsShake = false; // Prevents repeated shake at bounds
   private boundsShakeResetTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  // Element freeze state (hold Shift to freeze current element while navigating to ruler lines)
-  private isElementFrozen = false;
+  // Shift key state for temporarily showing rulers in redline mode
+  private isShiftHeld = false;
+
+  /** Tracks Alt (Option) so tooltip typography updates on keyup without mouse motion */
+  private lastAltKeyForTooltip = false;
+
+  // Track if CMD/Ctrl freeze visual is currently shown (for cleanup)
+  private isFreezeVisualShown = false;
 
   constructor(callbacks: ElementInspectorCallbacks = {}) {
     this.callbacks = callbacks;
@@ -200,7 +206,9 @@ export class ElementInspector {
     this.currentElement = null;
     this.currentElementInfo = null;
     this.selectedRulerLine = null;
-    this.isElementFrozen = false;
+    this.isShiftHeld = false;
+    this.lastAltKeyForTooltip = false;
+    this.isFreezeVisualShown = false;
     this.layerNavigator.reset();
     this.accumulatedWheelDelta = 0;
     this.hasShownBoundsShake = false;
@@ -278,7 +286,7 @@ export class ElementInspector {
 
       // Re-highlight current element with normal mode
       if (this.currentElement) {
-        this.highlightOverlay.highlight(this.currentElement);
+        this.applyHighlight(this.currentElement);
       }
     } else {
       this.alignmentGuides.hide();
@@ -333,8 +341,7 @@ export class ElementInspector {
 
       // Show both overlays for current element
       if (this.currentElement) {
-        this.highlightOverlay.highlight(this.currentElement);
-        this.alignmentGuides.showGuides(this.currentElement);
+        this.syncHighlightForElement(this.currentElement);
       }
     }
 
@@ -371,13 +378,44 @@ export class ElementInspector {
     return this.isHybridMode;
   }
 
+  private applyHighlight(element: Element): void {
+    const show = this.lastAltKeyForTooltip;
+    this.highlightOverlay.highlight(element, {
+      showTypographyInTooltip: show,
+      typography: show ? this.styleAnalyzer.extractTypographyStyles(element) : null,
+    });
+  }
+
+  /** Highlight and alignment guides according to ruler / hybrid / Shift state */
+  private syncHighlightForElement(element: Element): void {
+    if (this.isRulerMode) {
+      this.alignmentGuides.showGuides(element);
+      return;
+    }
+    const showRulersTemporarily = !this.isHybridMode && this.isShiftHeld;
+    if (this.isHybridMode) {
+      this.alignmentGuides.showGuides(element);
+      this.applyHighlight(element);
+    } else if (showRulersTemporarily) {
+      this.alignmentGuides.showGuides(element);
+      this.applyHighlight(element);
+    } else {
+      this.applyHighlight(element);
+    }
+  }
+
   // --- Event Handlers ---
 
   private handleMouseMove(e: MouseEvent): void {
     if (!this.isActive || this.isLocked) return;
 
-    // In ruler or hybrid mode, check if we're interacting with ruler UI
-    if (this.isRulerMode || this.isHybridMode) {
+    const altNow = e.altKey;
+    const altToggled = altNow !== this.lastAltKeyForTooltip;
+    this.lastAltKeyForTooltip = altNow;
+
+    // Check if we're interacting with ruler UI (in any mode that shows rulers)
+    const showingRulers = this.isRulerMode || this.isHybridMode || this.isShiftHeld;
+    if (showingRulers) {
       const target = e.target as Element;
       
       // Don't update element if hovering over ruler lines or prompt
@@ -393,36 +431,47 @@ export class ElementInspector {
       if (this.selectedRulerLine) {
         return;
       }
-      
-      // If element is frozen (Shift held) or CMD/Meta key is held, keep current element
-      // This allows user to navigate to ruler lines without changing the highlighted element
-      if (this.isElementFrozen || e.metaKey || e.ctrlKey || e.shiftKey) {
-        return;
+    }
+    
+    // Check CMD/Ctrl state for freeze behavior (check actual key state, not a flag)
+    const isCmdHeld = e.metaKey || e.ctrlKey;
+    
+    // Update freeze visual based on actual key state
+    if (isCmdHeld && !this.isFreezeVisualShown && this.currentElement) {
+      this.isFreezeVisualShown = true;
+      this.highlightOverlay.setFrozen(true);
+    } else if (!isCmdHeld && this.isFreezeVisualShown) {
+      this.isFreezeVisualShown = false;
+      this.highlightOverlay.setFrozen(false);
+    }
+    
+    // If CMD is held (element freeze), keep current element
+    // This allows user to keep an element selected while moving the mouse
+    if (isCmdHeld) {
+      if (this.currentElement && altToggled) {
+        this.syncHighlightForElement(this.currentElement);
       }
+      return;
     }
 
     // Update layer navigator
     this.layerNavigator.updateAtPoint(e.clientX, e.clientY);
 
-    // Get current element
     const element = this.layerNavigator.getCurrentElement();
-    if (element && element !== this.currentElement) {
+    const elementChanged = element !== null && element !== this.currentElement;
+
+    if (elementChanged && element) {
       this.currentElement = element;
-
-      // Show guides or highlight based on mode
-      if (this.isRulerMode) {
-        this.alignmentGuides.showGuides(element);
-      } else if (this.isHybridMode) {
-        // Show both ruler lines and highlight overlay
-        this.alignmentGuides.showGuides(element);
-        this.highlightOverlay.highlight(element, false);
-      } else {
-        this.highlightOverlay.highlight(element, false); // Simple highlight on hover
-      }
-
-      // Reset scroll state when hovering a new element
       this.accumulatedWheelDelta = 0;
       this.hasShownBoundsShake = false;
+    }
+
+    if (!element) {
+      return;
+    }
+
+    if (elementChanged || altToggled) {
+      this.syncHighlightForElement(element);
     }
   }
 
@@ -546,12 +595,8 @@ export class ElementInspector {
       // Show guides or highlight based on mode
       if (this.isRulerMode) {
         this.alignmentGuides.showGuides(element);
-      } else if (this.isHybridMode) {
-        // Hybrid mode: show both
-        this.alignmentGuides.showGuides(element);
-        this.highlightOverlay.highlight(element, this.isLocked);
       } else {
-        this.highlightOverlay.highlight(element, this.isLocked); // Box model when locked
+        this.syncHighlightForElement(element);
       }
 
       // If panel is visible, update it
@@ -626,13 +671,23 @@ export class ElementInspector {
         break;
 
       case 'Shift':
-        // In ruler or hybrid mode, Shift freezes current element to allow clicking on ruler lines
-        if ((this.isRulerMode || this.isHybridMode) && !this.isElementFrozen && this.currentElement) {
+        // In redline mode (not ruler or hybrid), Shift temporarily shows rulers
+        if (!this.isRulerMode && !this.isHybridMode && this.isActive && !this.isShiftHeld) {
           e.preventDefault();
-          this.isElementFrozen = true;
-          // Show visual feedback - update highlight to show "frozen" state
-          this.highlightOverlay.setFrozen(true);
-          console.log('[Redline] Element frozen (Shift) - move to ruler lines without losing selection');
+          this.isShiftHeld = true;
+          // Mount alignment guides once to show rulers
+          this.alignmentGuides.mount();
+          if (this.currentElement) {
+            this.alignmentGuides.showGuides(this.currentElement);
+          }
+          console.log('[Redline] Shift held - temporarily showing rulers');
+        }
+        break;
+
+      case 'Alt':
+        if (!e.repeat && this.currentElement) {
+          this.lastAltKeyForTooltip = true;
+          this.syncHighlightForElement(this.currentElement);
         }
         break;
     }
@@ -654,12 +709,22 @@ export class ElementInspector {
     }
 
     if (e.key === 'Shift') {
-      if (this.isElementFrozen) {
-        this.isElementFrozen = false;
-        this.highlightOverlay.setFrozen(false);
-        console.log('[Redline] Element unfrozen');
+      // In redline mode, releasing Shift hides the temporarily shown rulers
+      if (this.isShiftHeld) {
+        this.isShiftHeld = false;
+        this.alignmentGuides.hide();
+        this.alignmentGuides.unmount();
+        console.log('[Redline] Shift released - hiding temporary rulers');
       }
     }
+
+    if (e.key === 'Alt') {
+      this.lastAltKeyForTooltip = false;
+      if (this.currentElement) {
+        this.syncHighlightForElement(this.currentElement);
+      }
+    }
+    // Note: CMD/Ctrl freeze is handled in handleMouseMove based on actual key state
   }
 
   private handleScroll(): void {
@@ -672,12 +737,8 @@ export class ElementInspector {
     if (this.currentElement) {
       if (this.isRulerMode) {
         this.alignmentGuides.showGuides(this.currentElement);
-      } else if (this.isHybridMode) {
-        // Hybrid mode: update both
-        this.alignmentGuides.showGuides(this.currentElement);
-        this.highlightOverlay.highlight(this.currentElement, this.isLocked);
       } else {
-        this.highlightOverlay.highlight(this.currentElement, this.isLocked);
+        this.syncHighlightForElement(this.currentElement);
       }
     }
   }
@@ -688,13 +749,7 @@ export class ElementInspector {
     this.isLocked = true;
     this.currentElement = element;
     
-    // In hybrid mode, show both highlight and guides
-    if (this.isHybridMode) {
-      this.highlightOverlay.highlight(element, true); // Show box model when selected
-      this.alignmentGuides.showGuides(element);
-    } else {
-      this.highlightOverlay.highlight(element, true); // Show box model when selected
-    }
+    this.syncHighlightForElement(element);
 
     // Build element info
     this.currentElementInfo = this.buildElementInfo(element);
@@ -733,12 +788,8 @@ export class ElementInspector {
       // Show guides or highlight based on mode
       if (this.isRulerMode) {
         this.alignmentGuides.showGuides(element);
-      } else if (this.isHybridMode) {
-        // Show both ruler guides and highlight
-        this.alignmentGuides.showGuides(element);
-        this.highlightOverlay.highlight(element, this.isLocked);
       } else {
-        this.highlightOverlay.highlight(element, this.isLocked); // Box model when locked
+        this.syncHighlightForElement(element);
       }
 
       if (this.isLocked && !this.isRulerMode) {
@@ -780,6 +831,7 @@ export class ElementInspector {
       outerHTML: element.outerHTML,
       computedStyles,
       boundingRect: element.getBoundingClientRect(),
+      typography: this.styleAnalyzer.extractTypographyStyles(element),
       ancestorPath,
       heightChain,
       parentContainer,

@@ -147,6 +147,8 @@ export class LLMFormatter {
       '',
     ];
 
+    lines.push(...this.formatTypographySection(elementInfo));
+
     // Parent container (if relevant)
     if (elementInfo.parentContainer) {
       const pc = elementInfo.parentContainer;
@@ -240,6 +242,8 @@ export class LLMFormatter {
     lines.push('```');
     lines.push('');
 
+    lines.push(...this.formatTypographySection(elementInfo));
+
     // Parent container (if relevant)
     if (elementInfo.parentContainer) {
       const pc = elementInfo.parentContainer;
@@ -297,6 +301,20 @@ export class LLMFormatter {
 
     const attrStr = attrs.length > 0 ? ' ' + attrs.join(' ') : '';
     return `<${tag}${attrStr}>`;
+  }
+
+  private formatTypographySection(elementInfo: ElementInfo): string[] {
+    const t = elementInfo.typography;
+    if (!t) return [];
+
+    const lines: string[] = ['### Typography', '```css'];
+    lines.push(`font-size: ${t.fontSize};`);
+    lines.push(`font-family: ${t.fontFamily};`);
+    if (t.lineHeight && t.lineHeight !== 'normal') {
+      lines.push(`line-height: ${t.lineHeight};`);
+    }
+    lines.push('```', '');
+    return lines;
   }
 
   /**

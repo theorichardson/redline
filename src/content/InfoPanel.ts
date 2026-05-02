@@ -153,6 +153,11 @@ export class InfoPanel {
         align-items: center;
         justify-content: center;
         white-space: nowrap;
+        outline: none;
+      }
+
+      .btn:focus-visible {
+        outline: none;
       }
 
       .btn:hover {
@@ -376,6 +381,10 @@ export class InfoPanel {
       </div>
 
       <div class="details-content" id="details-content">
+        <div class="detail-section" id="typography-section" style="display: none;">
+          <div class="layout-list" id="typography-list"></div>
+        </div>
+
         <div class="detail-section">
           <div class="layout-list" id="layout-list"></div>
         </div>
@@ -512,6 +521,39 @@ export class InfoPanel {
       this.panel.style.right = 'auto';
     }
 
+    // Typography (only when element has renderable text)
+    const typographySection = this.shadow.getElementById('typography-section');
+    const typographyList = this.shadow.getElementById('typography-list');
+    if (typographySection && typographyList) {
+      const typo = elementInfo.typography;
+      if (typo) {
+        typographySection.style.display = '';
+        typographyList.textContent = '';
+        const typoItems: Array<{ prop: string; value: string }> = [
+          { prop: 'font-size', value: typo.fontSize },
+          { prop: 'font-family', value: typo.fontFamily },
+        ];
+        if (typo.lineHeight && typo.lineHeight !== 'normal') {
+          typoItems.push({ prop: 'line-height', value: typo.lineHeight });
+        }
+        typoItems.forEach((item) => {
+          const row = document.createElement('div');
+          row.className = 'layout-item';
+          const prop = document.createElement('span');
+          prop.className = 'prop';
+          prop.textContent = item.prop;
+          const value = document.createElement('span');
+          value.className = 'value';
+          value.textContent = item.value;
+          row.append(prop, document.createTextNode(' '), value);
+          typographyList.appendChild(row);
+        });
+      } else {
+        typographySection.style.display = 'none';
+        typographyList.textContent = '';
+      }
+    }
+
     // Layout styles - simplified list
     const layoutList = this.shadow.getElementById('layout-list');
     if (layoutList) {
@@ -535,28 +577,47 @@ export class InfoPanel {
         items.push({ prop: 'overflow', value: styles.overflow });
       }
 
-      layoutList.innerHTML = items
-        .map((item) => `<div class="layout-item"><span class="prop">${item.prop}</span> <span class="value">${item.value}</span></div>`)
-        .join('');
+      layoutList.textContent = '';
+      items.forEach((item) => {
+        const row = document.createElement('div');
+        row.className = 'layout-item';
+
+        const prop = document.createElement('span');
+        prop.className = 'prop';
+        prop.textContent = item.prop;
+
+        const value = document.createElement('span');
+        value.className = 'value';
+        value.textContent = item.value;
+
+        row.append(prop, document.createTextNode(' '), value);
+        layoutList.appendChild(row);
+      });
     }
 
     // Structure path - simplified
     const structurePath = this.shadow.getElementById('structure-path');
     if (structurePath) {
-      structurePath.innerHTML = breadcrumb
-        .slice(-5) // Show last 5 items
-        .map(
-          (node, i, arr) =>
-            `<span class="structure-path-item ${i === arr.length - 1 ? 'current' : ''}" data-index="${breadcrumb.length - arr.length + i}">${node.selector}</span>${i < arr.length - 1 ? '<span class="structure-path-sep">/</span>' : ''}`
-        )
-        .join('');
+      structurePath.textContent = '';
+      const visibleBreadcrumb = breadcrumb.slice(-5);
 
-      // Add click handlers
-      structurePath.querySelectorAll('.structure-path-item').forEach((item) => {
+      visibleBreadcrumb.forEach((node, i, arr) => {
+        const item = document.createElement('span');
+        item.className = `structure-path-item${i === arr.length - 1 ? ' current' : ''}`;
+        const index = breadcrumb.length - arr.length + i;
+        item.dataset.index = String(index);
+        item.textContent = node.selector;
         item.addEventListener('click', () => {
-          const index = parseInt(item.getAttribute('data-index') || '0');
           this.callbacks.onBreadcrumbClick(index);
         });
+        structurePath.appendChild(item);
+
+        if (i < arr.length - 1) {
+          const sep = document.createElement('span');
+          sep.className = 'structure-path-sep';
+          sep.textContent = '/';
+          structurePath.appendChild(sep);
+        }
       });
     }
 
@@ -565,22 +626,33 @@ export class InfoPanel {
     if (cssExplainer) {
       const explanations = CSSExplainer.generateExplanations(elementInfo.computedStyles as unknown as Record<string, string | undefined>);
       if (explanations.length > 0) {
-        const explanationHTML = explanations.map(exp => {
-          return `
-            <div class="css-prop-explanation">
-              <div class="css-prop-name">${exp.property}</div>
-              <div class="css-prop-value">${exp.value}</div>
-              <div class="css-prop-description">${exp.description}</div>
-            </div>
-          `;
-        }).join('');
-        
-        cssExplainer.innerHTML = `
-          <div class="css-explainer-title">Property Explanations</div>
-          ${explanationHTML}
-        `;
+        cssExplainer.textContent = '';
+        const title = document.createElement('div');
+        title.className = 'css-explainer-title';
+        title.textContent = 'Property Explanations';
+        cssExplainer.appendChild(title);
+
+        explanations.forEach((exp) => {
+          const row = document.createElement('div');
+          row.className = 'css-prop-explanation';
+
+          const name = document.createElement('div');
+          name.className = 'css-prop-name';
+          name.textContent = exp.property;
+
+          const value = document.createElement('div');
+          value.className = 'css-prop-value';
+          value.textContent = exp.value ?? '';
+
+          const description = document.createElement('div');
+          description.className = 'css-prop-description';
+          description.textContent = exp.description;
+
+          row.append(name, value, description);
+          cssExplainer.appendChild(row);
+        });
       } else {
-        cssExplainer.innerHTML = '';
+        cssExplainer.textContent = '';
       }
     }
 

@@ -36,6 +36,13 @@ export interface LayoutStyles {
   overflowY: string;
 }
 
+// Computed typography when the element has renderable text
+export interface TypographyStyles {
+  fontSize: string;
+  fontFamily: string;
+  lineHeight: string;
+}
+
 // Height chain node for tracing explicit heights
 export interface HeightChainNode {
   tagName: string;
@@ -88,6 +95,9 @@ export interface ElementInfo {
   // Layout
   computedStyles: LayoutStyles;
   boundingRect: DOMRect;
+
+  // Typography (null when element has no renderable text)
+  typography: TypographyStyles | null;
 
   // Hierarchy
   ancestorPath: AncestorNode[];

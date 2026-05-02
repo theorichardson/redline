@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Redline typography demo</title>
+  <style>
+    body {
+      font-family: Georgia, "Times New Roman", serif;
+      max-width: 560px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      line-height: 1.6;
+    }
+    h1 { font-size: 22px; font-family: system-ui, sans-serif; }
+    section {
+      margin: 2rem 0;
+      padding: 1rem;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+    .empty-row {
+      display: flex;
+      gap: 8px;
+      min-height: 48px;
+      align-items: center;
+      background: #f5f5f5;
+      padding: 8px;
+    }
+    .muted { font-size: 13px; color: #666; font-family: ui-monospace, monospace; }
+    .nested span { font-size: 18px; font-family: Helvetica, Arial, sans-serif; }
+    input, select { font-size: 14px; margin-top: 6px; }
+    ul.instructions {
+      font-size: 14px;
+      font-family: system-ui, sans-serif;
+    }
+  </style>
+</head>
+<body>
+  <h1>Typography demo for Redline</h1>
+  <ul class="instructions">
+    <li>Load the unpacked extension from <code>dist/</code>, activate Redline, then inspect these blocks.</li>
+    <li><strong>Shift</strong> (hold): alignment guides</li>
+    <li><strong>Alt / Option</strong> (hold): font-size, font, and line-height in the hover tooltip (only when the node has text)</li>
+    <li><strong>Cmd/Ctrl</strong> (hold): freeze the hovered element</li>
+    <li>Open the panel and expand <strong>Details</strong> for the same typography fields when an element has text.</li>
+  </ul>
+
+  <section>
+    <p class="muted">Empty flex row (no text nodes) — Alt should not add typography to the tooltip.</p>
+    <div class="empty-row">
+      <div></div>
+      <div></div>
+    </div>
+  </section>
+
+  <section>
+    <p>This paragraph uses the page default (Georgia). Hover it and hold Alt.</p>
+    <p class="nested">Mixed: outer Georgia, <span>inner 18px Helvetica span</span>.</p>
+  </section>
+
+  <section>
+    <label>
+      Input with value<br />
+      <input type="text" value="Sample text" />
+    </label>
+    <label style="display: block; margin-top: 1rem;">
+      Placeholder only<br />
+      <input type="text" placeholder="Placeholder copy" />
+    </label>
+    <label style="display: block; margin-top: 1rem;">
+      Select<br />
+      <select>
+        <option>First option</option>
+        <option>Second option</option>
+      </select>
+    </label>
+  </section>
+</body>
+</html>

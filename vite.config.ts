@@ -39,6 +39,11 @@ export default defineConfig({
         // Copy popup HTML
         copyFileSync('src/popup/popup.html', 'dist/popup.html');
 
+        const demoHtml = 'test/font-sizes-demo.html';
+        if (existsSync(demoHtml)) {
+          copyFileSync(demoHtml, 'dist/font-sizes-demo.html');
+        }
+
         // Copy icons if they exist
         ['icon16.png', 'icon48.png', 'icon128.png'].forEach((icon) => {
           const src = `public/icons/${icon}`;

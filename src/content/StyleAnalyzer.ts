@@ -1,4 +1,4 @@
-import type { LayoutStyles, HeightChainNode, ParentContainerInfo } from '../shared/types';
+import type { LayoutStyles, HeightChainNode, ParentContainerInfo, TypographyStyles } from '../shared/types';
 
 /**
  * StyleAnalyzer - Extract layout-relevant computed styles from elements
@@ -60,6 +60,53 @@ export class StyleAnalyzer {
     }
 
     return styles as LayoutStyles;
+  }
+
+  /**
+   * True when the element has text the user could read (computed font-size/family is meaningful).
+   * Parent wrappers include descendants: innerText reflects contained text.
+   * True “glyph under cursor” leaf resolution is not attempted here.
+   */
+  elementHasRenderableText(element: Element): boolean {
+    if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+      return (
+        element.value.trim().length > 0 || (element.placeholder?.trim().length ?? 0) > 0
+      );
+    }
+
+    if (element instanceof HTMLSelectElement) {
+      const opt = element.selectedOptions[0];
+      const t = opt?.text?.trim() ?? '';
+      return t.length > 0;
+    }
+
+    if (element.namespaceURI === 'http://www.w3.org/2000/svg') {
+      const tag = element.tagName.toLowerCase();
+      if (tag === 'text' || tag === 'tspan') {
+        return (element.textContent?.trim().length ?? 0) > 0;
+      }
+      return false;
+    }
+
+    const htmlEl = element as HTMLElement;
+    if (typeof htmlEl.innerText !== 'string') return false;
+    return htmlEl.innerText.trim().length > 0;
+  }
+
+  /**
+   * Typography from computed styles, or null if the element has no renderable text.
+   */
+  extractTypographyStyles(element: Element): TypographyStyles | null {
+    if (!this.elementHasRenderableText(element)) {
+      return null;
+    }
+
+    const computed = window.getComputedStyle(element);
+    return {
+      fontSize: computed.fontSize,
+      fontFamily: computed.fontFamily,
+      lineHeight: computed.lineHeight,
+    };
   }
 
   /**

@@ -8,42 +8,50 @@
  */
 async function toggleInspection(tabId: number): Promise<void> {
   try {
-    // Try to send message first
     await chrome.tabs.sendMessage(tabId, { type: 'TOGGLE_INSPECTION' });
+    return;
   } catch {
-    // Content script not loaded, inject it first
     console.log('[Redline] Injecting content script into tab', tabId);
     try {
       await chrome.scripting.executeScript({
         target: { tabId },
         files: ['content.js'],
       });
-      // Wait a moment for script to initialize, then send message
-      setTimeout(() => {
-        chrome.tabs.sendMessage(tabId, { type: 'TOGGLE_INSPECTION' });
-      }, 100);
     } catch (err) {
       console.error('[Redline] Failed to inject content script:', err);
+      return;
     }
+    for (let attempt = 0; attempt < 8; attempt++) {
+      await new Promise((r) => setTimeout(r, 40));
+      try {
+        await chrome.tabs.sendMessage(tabId, { type: 'TOGGLE_INSPECTION' });
+        return;
+      } catch {
+        /* content script still booting */
+      }
+    }
+    console.error('[Redline] Toggle message failed after injection');
   }
 }
 
+const TOGGLE_COMMANDS = new Set(['toggle-inspection', 'toggle-inspection-alt']);
+
 // Listen for keyboard shortcut command
 chrome.commands.onCommand.addListener((command) => {
-  if (command === 'toggle-inspection') {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      const activeTab = tabs[0];
-      if (activeTab?.id) {
-        toggleInspection(activeTab.id);
-      }
-    });
-  }
+  if (!TOGGLE_COMMANDS.has(command)) return;
+
+  void chrome.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
+    const activeTab = tabs[0];
+    if (activeTab?.id) {
+      void toggleInspection(activeTab.id);
+    }
+  });
 });
 
 // Listen for browser action click (extension icon) - only fires if no popup
 chrome.action.onClicked.addListener((tab) => {
   if (tab.id) {
-    toggleInspection(tab.id);
+    void toggleInspection(tab.id);
   }
 });
 
@@ -51,9 +59,9 @@ chrome.action.onClicked.addListener((tab) => {
 chrome.runtime.onMessage.addListener((message, messageSender, sendResponse) => {
   if (message.type === 'GET_STATE') {
     sendResponse({ isActive: false });
+    return;
   }
 
-  // Update badge when inspection state changes
   if (message.type === 'STATE_CHANGED' && messageSender.tab?.id) {
     const isActive = message.isActive;
     chrome.action.setBadgeText({
@@ -65,8 +73,6 @@ chrome.runtime.onMessage.addListener((message, messageSender, sendResponse) => {
       tabId: messageSender.tab.id,
     });
   }
-
-  return true;
 });
 
 console.log('[Redline] Service worker initialized');

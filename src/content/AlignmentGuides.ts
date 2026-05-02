@@ -37,6 +37,8 @@ export class AlignmentGuides {
   private guideColor = '#e63946';
   private readonly ALIGNMENT_THRESHOLD = 2; // pixels for alignment matching
   private readonly MAX_ELEMENTS = 100;
+  private readonly LINE_CACHE_TTL = 120; // ms
+  private lineElementsCache = new Map<string, { timestamp: number; elements: Element[] }>();
 
   private rulerLines: RulerLine[] = [];
   private selectedLine: RulerLine | null = null;
@@ -219,17 +221,6 @@ export class AlignmentGuides {
         opacity: 0.6;
       }
 
-      .guide-marker {
-        position: fixed;
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        background: ${this.guideColor};
-        transform: translate(-50%, -50%);
-        pointer-events: none;
-        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5);
-      }
-
       /* Preview highlight (on hover) - dashed border */
       .element-highlight-preview {
         position: fixed;
@@ -310,9 +301,6 @@ export class AlignmentGuides {
 
       // Draw ruler lines from all edges (now interactive with intersection-based selection)
       this.drawRulerLines(rect);
-
-      // Draw alignment matches
-      this.drawAlignmentMatches(rect, matches);
 
       // Draw distance labels
       this.drawDistanceLabels(rect, matches);
@@ -449,6 +437,18 @@ export class AlignmentGuides {
     this.createInteractiveLine('horizontal', centerY, 'centerY', 'center');
   }
 
+  private getLineCacheKey(orientation: 'horizontal' | 'vertical', position: number): string {
+    const roundedPosition = Math.round(position);
+    return [
+      orientation,
+      roundedPosition,
+      window.innerWidth,
+      window.innerHeight,
+      window.scrollX,
+      window.scrollY,
+    ].join(':');
+  }
+
   /**
    * Find ALL elements that a ruler line passes through
    * Uses document.elementsFromPoint for robust hit testing that handles
@@ -458,16 +458,24 @@ export class AlignmentGuides {
     orientation: 'horizontal' | 'vertical',
     position: number
   ): Element[] {
+    const cacheKey = this.getLineCacheKey(orientation, position);
+    const cached = this.lineElementsCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < this.LINE_CACHE_TTL) {
+      return cached.elements;
+    }
+
     const elementsSet = new Set<Element>();
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
     
     // Sample points along the line
-    const SAMPLE_INTERVAL = 20; // pixels between sample points
+    const TARGET_SAMPLES = 120;
+    const axisLength = orientation === 'horizontal' ? viewportWidth : viewportHeight;
+    const sampleInterval = Math.max(20, Math.ceil(axisLength / TARGET_SAMPLES));
     
     if (orientation === 'horizontal') {
       // Horizontal line at Y=position, sample along X axis
-      for (let x = 0; x < viewportWidth; x += SAMPLE_INTERVAL) {
+      for (let x = 0; x < viewportWidth; x += sampleInterval) {
         const elementsAtPoint = document.elementsFromPoint(x, position);
         for (const el of elementsAtPoint) {
           if (this.isValidElement(el)) {
@@ -477,7 +485,7 @@ export class AlignmentGuides {
       }
     } else {
       // Vertical line at X=position, sample along Y axis
-      for (let y = 0; y < viewportHeight; y += SAMPLE_INTERVAL) {
+      for (let y = 0; y < viewportHeight; y += sampleInterval) {
         const elementsAtPoint = document.elementsFromPoint(position, y);
         for (const el of elementsAtPoint) {
           if (this.isValidElement(el)) {
@@ -499,7 +507,12 @@ export class AlignmentGuides {
     });
     
     // Limit to reasonable number
-    return elements.slice(0, this.MAX_ELEMENTS);
+    const limitedElements = elements.slice(0, this.MAX_ELEMENTS);
+    if (this.lineElementsCache.size > 50) {
+      this.lineElementsCache.clear();
+    }
+    this.lineElementsCache.set(cacheKey, { timestamp: Date.now(), elements: limitedElements });
+    return limitedElements;
   }
   
   /**
@@ -804,64 +817,6 @@ export class AlignmentGuides {
     }
 
     return matches;
-  }
-
-  private drawAlignmentMatches(rect: DOMRect, matches: AlignmentMatch[]): void {
-    const drawn = new Set<string>();
-
-    for (const match of matches) {
-      const matchRect = match.element.getBoundingClientRect();
-      let key = '';
-      let x = 0;
-      let y = 0;
-
-      switch (match.type) {
-        case 'top':
-          key = `h-${match.coordinate}`;
-          x = Math.min(rect.left, matchRect.left);
-          y = match.coordinate;
-          break;
-        case 'bottom':
-          key = `h-${match.coordinate}`;
-          x = Math.min(rect.left, matchRect.left);
-          y = match.coordinate;
-          break;
-        case 'left':
-          key = `v-${match.coordinate}`;
-          x = match.coordinate;
-          y = Math.min(rect.top, matchRect.top);
-          break;
-        case 'right':
-          key = `v-${match.coordinate}`;
-          x = match.coordinate;
-          y = Math.min(rect.top, matchRect.top);
-          break;
-        case 'centerX':
-          key = `v-${match.coordinate}`;
-          x = match.coordinate;
-          y = Math.min(rect.top, matchRect.top);
-          break;
-        case 'centerY':
-          key = `h-${match.coordinate}`;
-          x = Math.min(rect.left, matchRect.left);
-          y = match.coordinate;
-          break;
-      }
-
-      // Draw marker at intersection if not already drawn
-      if (!drawn.has(key)) {
-        this.createMarker(x, y);
-        drawn.add(key);
-      }
-    }
-  }
-
-  private createMarker(x: number, y: number): void {
-    const marker = document.createElement('div');
-    marker.className = 'guide-marker';
-    marker.style.left = `${x}px`;
-    marker.style.top = `${y}px`;
-    this.labelsContainer.appendChild(marker);
   }
 
   private drawDistanceLabels(rect: DOMRect, matches: AlignmentMatch[]): void {

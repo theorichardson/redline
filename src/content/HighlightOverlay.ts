@@ -1,4 +1,10 @@
 import { Tooltip, createTooltipContent } from './Tooltip';
+import type { TypographyStyles } from '../shared/types';
+
+export interface HighlightTooltipOpts {
+  showTypographyInTooltip?: boolean;
+  typography?: TypographyStyles | null;
+}
 
 /**
  * Box model values parsed from computed styles
@@ -86,10 +92,10 @@ export class HighlightOverlay {
     // Tooltip - unified component
     this.tooltip = new Tooltip();
 
-    // Frozen indicator (shows when Space is held)
+    // Frozen indicator (shows when CMD is held)
     this.frozenIndicator = document.createElement('div');
     this.frozenIndicator.className = 'frozen-indicator';
-    this.frozenIndicator.textContent = '⎵ Frozen';
+    this.frozenIndicator.textContent = '⌘ Frozen';
 
     // Append in order (back to front)
     this.shadow.appendChild(this.marginOverlay);
@@ -225,7 +231,7 @@ export class HighlightOverlay {
   /**
    * Highlight an element - always shows box model with red outline
    */
-  highlight(element: Element, _showBoxModel = true): void {
+  highlight(element: Element, tooltipOpts?: HighlightTooltipOpts): void {
     this.showBoxModel = true; // Always show box model
     const rect = element.getBoundingClientRect();
 
@@ -240,7 +246,7 @@ export class HighlightOverlay {
     this.showBoxModelOverlay(element, rect);
 
     // Update tooltip
-    this.updateTooltip(element, rect);
+    this.updateTooltip(element, rect, tooltipOpts);
   }
 
   /**
@@ -488,7 +494,18 @@ export class HighlightOverlay {
     this.paddingLabels.style.display = 'none';
   }
 
-  private updateTooltip(element: Element, rect: DOMRect): void {
+  /** First font face from computed stack + truncation for single-line tooltip */
+  private truncateFontFamilyForTooltip(family: string, maxChars = 44): string {
+    const raw = family.split(',')[0]?.trim() ?? family;
+    const stripped =
+      (raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))
+        ? raw.slice(1, -1)
+        : raw;
+    if (stripped.length <= maxChars) return stripped;
+    return stripped.slice(0, Math.max(1, maxChars - 1)) + '…';
+  }
+
+  private updateTooltip(element: Element, rect: DOMRect, tooltipOpts?: HighlightTooltipOpts): void {
     const tag = element.tagName.toLowerCase();
     const id = element.id ? `#${element.id}` : '';
     const classes = Array.from(element.classList)
@@ -504,11 +521,22 @@ export class HighlightOverlay {
     if (id) elementName += id;
     if (classes) elementName += classes;
 
-    // Create tooltip content with formatted parts
-    const content = createTooltipContent([
+    const parts: Array<{ label?: string; value: string }> = [
       { value: elementName },
-      { value: `${width} × ${height}` }
-    ]);
+      { value: `${width} × ${height}` },
+    ];
+
+    const t = tooltipOpts?.typography;
+    if (tooltipOpts?.showTypographyInTooltip && t) {
+      parts.push({ label: 'font-size:', value: t.fontSize });
+      parts.push({ label: 'font:', value: this.truncateFontFamilyForTooltip(t.fontFamily) });
+      if (t.lineHeight && t.lineHeight !== 'normal') {
+        parts.push({ label: 'lh:', value: t.lineHeight });
+      }
+    }
+
+    // Create tooltip content with formatted parts (same structure as default)
+    const content = createTooltipContent(parts);
 
     // Calculate target rect including margin if showing box model
     let targetRect = rect;
@@ -577,7 +605,7 @@ export class HighlightOverlay {
   }
 
   /**
-   * Set the frozen state (when Space is held to lock element selection)
+   * Set the frozen state (when CMD is held to lock element selection)
    */
   setFrozen(frozen: boolean): void {
     if (this.isFrozen === frozen) return; // No change

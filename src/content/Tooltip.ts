@@ -85,15 +85,18 @@ export class Tooltip {
         color: #fff;
       }
 
-      /* Content styling */
+      /* Content styling — same metrics as tooltip body so labels aren’t visually smaller than values */
       .tooltip .label {
+        font-size: inherit;
+        font-weight: inherit;
         color: rgba(255, 255, 255, 0.7);
         margin-right: 4px;
       }
 
       .tooltip .value {
+        font-size: inherit;
+        font-weight: inherit;
         color: #fff;
-        font-weight: 600;
       }
 
       .tooltip.light .label {

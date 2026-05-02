@@ -58,24 +58,6 @@ function updateToggleUI(enabled: boolean): void {
   }
 }
 
-/**
- * Notify all tabs about the state change
- */
-async function notifyAllTabs(enabled: boolean): Promise<void> {
-  const tabs = await chrome.tabs.query({});
-  for (const tab of tabs) {
-    if (tab.id) {
-      try {
-        await chrome.tabs.sendMessage(tab.id, { 
-          type: 'REDLINE_ENABLED_CHANGED', 
-          enabled 
-        });
-      } catch {
-        // Tab may not have content script loaded yet
-      }
-    }
-  }
-}
 
 // Initialize toggle state
 getEnabledState().then((enabled) => {
@@ -89,7 +71,6 @@ enableToggle?.addEventListener('click', async () => {
   
   updateToggleUI(newState);
   await setEnabledState(newState);
-  await notifyAllTabs(newState);
 });
 
 // Check current state

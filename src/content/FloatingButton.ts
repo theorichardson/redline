@@ -7,6 +7,7 @@ import { getTooltipCSS } from './styles';
 
 export interface FloatingButtonCallbacks {
   onToggleRedline: () => void;
+  onCollapse?: (collapsed: boolean) => void;
 }
 
 export class FloatingButton {
@@ -21,6 +22,11 @@ export class FloatingButton {
   private isDragging: boolean = false;
   private dragStartX: number = 0;
   private dragStartLeft: number = 0;
+  private boundHandleDragStart: ((e: MouseEvent) => void) | null = null;
+  private boundHandleDragMove: ((e: MouseEvent) => void) | null = null;
+  private boundHandleDragEnd: (() => void) | null = null;
+  private boundHandleDoubleClick: ((e: MouseEvent) => void) | null = null;
+  private expandActivationTimeout: number | null = null;
 
   // Lucide SVG Icons
   // ruler-dimension-line icon for redline mode (inactive)
@@ -71,8 +77,8 @@ export class FloatingButton {
     this.createElements();
     this.attachStyles();
     this.attachEventListeners();
-    this.loadCollapseState();
-    this.loadPosition();
+    void this.loadCollapseState();
+    void this.loadPosition();
 
     // Start hidden by default - caller should call show() if needed
     this.container!.style.display = 'none';
@@ -85,11 +91,28 @@ export class FloatingButton {
   unmount(): void {
     if (!this.container) return;
 
+    if (this.boundHandleDragStart) {
+      this.container.removeEventListener('mousedown', this.boundHandleDragStart);
+    }
+    if (this.boundHandleDoubleClick) {
+      this.container.removeEventListener('dblclick', this.boundHandleDoubleClick);
+    }
+    if (this.boundHandleDragMove) {
+      document.removeEventListener('mousemove', this.boundHandleDragMove);
+    }
+    if (this.boundHandleDragEnd) {
+      document.removeEventListener('mouseup', this.boundHandleDragEnd);
+    }
+
     this.container.remove();
     this.container = null;
     this.redlineButton = null;
     this.collapseButton = null;
     this.buttonsContainer = null;
+    this.boundHandleDragStart = null;
+    this.boundHandleDragMove = null;
+    this.boundHandleDragEnd = null;
+    this.boundHandleDoubleClick = null;
   }
 
   /**
@@ -231,11 +254,6 @@ export class FloatingButton {
         background: rgba(255, 255, 255, 0.15);
       }
 
-      .redline-fab:focus-visible {
-        outline: 2px solid #e63946;
-        outline-offset: 2px;
-      }
-
       .redline-fab--active {
         background: #e63946;
         color: white;
@@ -298,11 +316,6 @@ export class FloatingButton {
         background: rgba(255, 255, 255, 0.15);
       }
 
-      .redline-collapse-btn:focus-visible {
-        outline: 2px solid #e63946;
-        outline-offset: 2px;
-      }
-
       /* Collapsed state - slide down and show only chevron */
       #redline-floating-button.collapsed {
         bottom: 0px;
@@ -351,7 +364,7 @@ export class FloatingButton {
    */
   private attachEventListeners(): void {
     // Helper to prevent Space key from triggering button clicks
-    // (Space is used for element freeze in hybrid/ruler mode)
+    // (Prevents accidental button activation during keyboard navigation)
     const preventSpaceActivation = (e: KeyboardEvent) => {
       if (e.key === ' ') {
         e.preventDefault();
@@ -374,18 +387,27 @@ export class FloatingButton {
     this.collapseButton?.addEventListener('keydown', preventSpaceActivation);
 
     // Drag to reposition
-    this.container?.addEventListener('mousedown', this.handleDragStart.bind(this));
-    document.addEventListener('mousemove', this.handleDragMove.bind(this));
-    document.addEventListener('mouseup', this.handleDragEnd.bind(this));
+    this.boundHandleDragStart = this.handleDragStart.bind(this);
+    this.boundHandleDragMove = this.handleDragMove.bind(this);
+    this.boundHandleDragEnd = this.handleDragEnd.bind(this);
+    if (this.container) {
+      this.container.addEventListener('mousedown', this.boundHandleDragStart);
+    }
+    document.addEventListener('mousemove', this.boundHandleDragMove);
+    document.addEventListener('mouseup', this.boundHandleDragEnd);
 
     // Double-click to center
-    this.container?.addEventListener('dblclick', this.handleDoubleClick.bind(this));
+    this.boundHandleDoubleClick = this.handleDoubleClick.bind(this);
+    if (this.container) {
+      this.container.addEventListener('dblclick', this.boundHandleDoubleClick);
+    }
   }
 
   /**
    * Toggle collapse state
    */
   private toggleCollapse(): void {
+    const wasCollapsed = this.isCollapsed;
     this.isCollapsed = !this.isCollapsed;
     this.saveCollapseState();
     
@@ -400,34 +422,78 @@ export class FloatingButton {
         this.collapseButton!.title = 'Collapse buttons';
       }
     }
+
+    this.callbacks.onCollapse?.(this.isCollapsed);
+
+    if (wasCollapsed && !this.isCollapsed) {
+      this.scheduleRedlineActivationOnExpand();
+    }
   }
 
   /**
-   * Load collapse state from localStorage
+   * Activate redline after expand animation finishes
    */
-  private loadCollapseState(): void {
+  private scheduleRedlineActivationOnExpand(): void {
+    if (this.expandActivationTimeout) {
+      window.clearTimeout(this.expandActivationTimeout);
+      this.expandActivationTimeout = null;
+    }
+
+    const container = this.buttonsContainer;
+    if (!container) {
+      this.callbacks.onToggleRedline();
+      return;
+    }
+
+    let fired = false;
+    const finalize = () => {
+      if (fired) return;
+      fired = true;
+      container.removeEventListener('transitionend', handleTransitionEnd);
+      if (this.expandActivationTimeout) {
+        window.clearTimeout(this.expandActivationTimeout);
+        this.expandActivationTimeout = null;
+      }
+      this.callbacks.onToggleRedline();
+    };
+
+    const handleTransitionEnd = (e: TransitionEvent) => {
+      if (e.target !== container) return;
+      finalize();
+    };
+
+    container.addEventListener('transitionend', handleTransitionEnd);
+    // Fallback in case transitionend doesn't fire
+    this.expandActivationTimeout = window.setTimeout(finalize, 500);
+  }
+
+  /**
+   * Load collapse state from chrome.storage.local
+   */
+  private async loadCollapseState(): Promise<void> {
     try {
-      const saved = localStorage.getItem(FloatingButton.STORAGE_KEY);
-      if (saved === 'true') {
+      const result = await chrome.storage.local.get(FloatingButton.STORAGE_KEY);
+      const saved = result[FloatingButton.STORAGE_KEY];
+      if (saved === true || saved === 'true') {
         this.isCollapsed = true;
         this.container?.classList.add('collapsed');
         this.collapseButton?.setAttribute('aria-label', 'Expand buttons');
         this.collapseButton!.title = 'Expand buttons';
       }
     } catch (e) {
-      // localStorage might not be available
       console.warn('Failed to load collapse state:', e);
     }
   }
 
   /**
-   * Save collapse state to localStorage
+   * Save collapse state to chrome.storage.local
    */
-  private saveCollapseState(): void {
+  private async saveCollapseState(): Promise<void> {
     try {
-      localStorage.setItem(FloatingButton.STORAGE_KEY, String(this.isCollapsed));
+      await chrome.storage.local.set({
+        [FloatingButton.STORAGE_KEY]: this.isCollapsed,
+      });
     } catch (e) {
-      // localStorage might not be available
       console.warn('Failed to save collapse state:', e);
     }
   }
@@ -532,12 +598,13 @@ export class FloatingButton {
   }
 
   /**
-   * Load position from localStorage
+   * Load position from chrome.storage.local
    */
-  private loadPosition(): void {
+  private async loadPosition(): Promise<void> {
     try {
-      const saved = localStorage.getItem(FloatingButton.STORAGE_POSITION_KEY);
-      if (saved && this.container) {
+      const result = await chrome.storage.local.get(FloatingButton.STORAGE_POSITION_KEY);
+      const saved = result[FloatingButton.STORAGE_POSITION_KEY];
+      if (typeof saved === 'string' && this.container) {
         this.container.style.left = saved;
       }
     } catch (e) {
@@ -546,13 +613,15 @@ export class FloatingButton {
   }
 
   /**
-   * Save position to localStorage
+   * Save position to chrome.storage.local
    */
-  private savePosition(): void {
+  private async savePosition(): Promise<void> {
     try {
       if (this.container) {
         const left = this.container.style.left || '50%';
-        localStorage.setItem(FloatingButton.STORAGE_POSITION_KEY, left);
+        await chrome.storage.local.set({
+          [FloatingButton.STORAGE_POSITION_KEY]: left,
+        });
       }
     } catch (e) {
       console.warn('Failed to save position:', e);
