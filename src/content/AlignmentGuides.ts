@@ -29,6 +29,8 @@ export interface RulerLineCallbacks {
 /** When ruler interaction is off, guides are visual-only (no click/hover on lines). */
 export interface AlignmentGuidesOptions {
   enableRulerInteraction?: boolean;
+  /** When false, hides the Guides’ element outline (use when another overlay draws the box). Default true */
+  showElementHighlightFrame?: boolean;
 }
 
 export class AlignmentGuides {
@@ -39,6 +41,7 @@ export class AlignmentGuides {
   private labelsContainer: HTMLElement;
   private callbacks: RulerLineCallbacks;
   private readonly enableRulerInteraction: boolean;
+  private readonly showElementHighlightFrame: boolean;
 
   private guideColor = '#e63946';
   private readonly ALIGNMENT_THRESHOLD = 2; // pixels for alignment matching
@@ -61,6 +64,7 @@ export class AlignmentGuides {
   constructor(callbacks: RulerLineCallbacks = {}, options?: AlignmentGuidesOptions) {
     this.callbacks = callbacks;
     this.enableRulerInteraction = options?.enableRulerInteraction ?? true;
+    this.showElementHighlightFrame = options?.showElementHighlightFrame ?? true;
 
     // Create shadow DOM host for style isolation
     this.container = document.createElement('div');
@@ -310,13 +314,16 @@ export class AlignmentGuides {
 
     const rect = element.getBoundingClientRect();
 
-    // Draw highlight box around element
-    this.highlightBox.style.top = `${rect.top}px`;
-    this.highlightBox.style.left = `${rect.left}px`;
-    this.highlightBox.style.width = `${rect.width}px`;
-    this.highlightBox.style.height = `${rect.height}px`;
-    this.highlightBox.style.display = 'block';
-    
+    if (this.showElementHighlightFrame) {
+      this.highlightBox.style.top = `${rect.top}px`;
+      this.highlightBox.style.left = `${rect.left}px`;
+      this.highlightBox.style.width = `${rect.width}px`;
+      this.highlightBox.style.height = `${rect.height}px`;
+      this.highlightBox.style.display = 'block';
+    } else {
+      this.highlightBox.style.display = 'none';
+    }
+
     // In hybrid mode, only show rulers if Shift is pressed
     const shouldShowRulers = !this.isHybridMode || this.isShiftPressed;
     

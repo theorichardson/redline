@@ -77,12 +77,24 @@ export class FloatingButton {
     this.createElements();
     this.attachStyles();
     this.attachEventListeners();
-    void this.loadCollapseState();
-    void this.loadPosition();
+
+    // Suppress transitions until both persisted-state loads finish so the bar
+    // doesn't animate from default → restored on every page load.
+    this.container!.classList.add('redline-no-transition');
 
     // Start hidden by default - caller should call show() if needed
     this.container!.style.display = 'none';
     document.body.appendChild(this.container!);
+
+    void Promise.all([this.loadCollapseState(), this.loadPosition()]).then(() => {
+      // Wait two frames so the browser commits the loaded styles without
+      // transitioning, then re-enable transitions for subsequent interactions.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          this.container?.classList.remove('redline-no-transition');
+        });
+      });
+    });
   }
 
   /**
@@ -207,6 +219,16 @@ export class FloatingButton {
       #redline-floating-button.dragging {
         cursor: grabbing;
         transition: none;
+      }
+
+      /* Suppress all transitions while initial persisted state is being applied
+         (collapse + position) so reloads don't animate from defaults. */
+      #redline-floating-button.redline-no-transition,
+      #redline-floating-button.redline-no-transition *,
+      #redline-floating-button.redline-no-transition *::before,
+      #redline-floating-button.redline-no-transition *::after {
+        transition: none !important;
+        animation: none !important;
       }
 
       /* Container content wrapper */
@@ -401,6 +423,32 @@ export class FloatingButton {
     if (this.container) {
       this.container.addEventListener('dblclick', this.boundHandleDoubleClick);
     }
+  }
+
+  /**
+   * Whether the bar is currently collapsed.
+   */
+  getIsCollapsed(): boolean {
+    return this.isCollapsed;
+  }
+
+  /**
+   * Expand the bar if it is collapsed. Unlike clicking the chevron, this does
+   * not trigger the auto-activate-on-expand callback — callers that want to
+   * also activate redline should do so explicitly.
+   */
+  expand(): void {
+    if (!this.isCollapsed) return;
+    this.isCollapsed = false;
+    void this.saveCollapseState();
+
+    if (this.container) {
+      this.container.classList.remove('collapsed');
+      this.collapseButton?.setAttribute('aria-label', 'Collapse buttons');
+      if (this.collapseButton) this.collapseButton.title = 'Collapse buttons';
+    }
+
+    this.callbacks.onCollapse?.(false);
   }
 
   /**

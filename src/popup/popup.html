@@ -200,13 +200,6 @@
   </div>
 
   <div class="content">
-    <div class="section toggle-section">
-      <div class="toggle-container">
-        <span class="toggle-label">Enable Redline</span>
-        <div class="toggle-switch active" id="enable-toggle" role="switch" aria-checked="true"></div>
-      </div>
-    </div>
-
     <div class="section">
       <button class="activate-btn" id="activate-btn">
         Activate Inspector
@@ -218,9 +211,9 @@
       <div class="shortcut">
         <span class="shortcut-label">Toggle Inspector</span>
         <div class="shortcut-keys">
-          <kbd>⌘</kbd><kbd>⇧</kbd><kbd>L</kbd>
+          <kbd>⌥</kbd><kbd>⇧</kbd><kbd>R</kbd>
           <span style="opacity: 0.7; margin: 0 4px;">or</span>
-          <kbd>⌥</kbd><kbd>⇧</kbd><kbd>L</kbd>
+          <kbd>⌘</kbd><kbd>⇧</kbd><kbd>L</kbd>
         </div>
       </div>
       <p class="hint" style="font-size: 11px; opacity: 0.75; margin-top: 8px; line-height: 1.35;">
@@ -233,13 +226,19 @@
           <kbd>↑</kbd><kbd>↓</kbd> or <kbd>scroll</kbd>
         </div>
       </div>
+      <div class="shortcut">
+        <span class="shortcut-label">Font info in label</span>
+        <div class="shortcut-keys">
+          hold <kbd>⌥</kbd> <span style="opacity: 0.7;">(Alt)</span>
+        </div>
+      </div>
     </div>
 
     <div class="section">
       <div class="section-title">How to Use</div>
       <ol class="instructions">
         <li>Activate ruler mode</li>
-        <li>Hover to snap alignment guides and the highlight to the stack under your cursor</li>
+        <li>Hover for alignment rules, margin/border/padding tints, and the dark label — hold Option for font details</li>
         <li>Scroll or use arrow keys to move through overlapping layers</li>
         <li>Press Escape to exit</li>
       </ol>
@@ -247,7 +246,7 @@
   </div>
 
   <div class="footer">
-    Guides only — no page click capture while inspecting
+    No annotations or AI copy — layout inspection only
   </div>
 
   <script src="popup.js" type="module"></script>

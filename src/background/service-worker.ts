@@ -54,6 +54,33 @@ chrome.action.onClicked.addListener((tab) => {
   }
 });
 
+/**
+ * Inject content.js into every existing http(s) tab. Used on install/update
+ * so the floating bar appears immediately without requiring a page refresh.
+ * The content script's own DOM sentinel guards against double-mounting.
+ */
+async function injectIntoAllTabs(): Promise<void> {
+  const tabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] });
+  await Promise.all(
+    tabs.map(async (tab) => {
+      if (!tab.id) return;
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['content.js'],
+        });
+      } catch {
+        // Some pages (chrome web store, view-source:, etc.) reject injection.
+        // Silently skip — they're out of scope for this extension anyway.
+      }
+    }),
+  );
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+  void injectIntoAllTabs();
+});
+
 // Handle messages from content scripts
 chrome.runtime.onMessage.addListener((message, messageSender, sendResponse) => {
   if (message.type === 'GET_STATE') {

@@ -41,9 +41,10 @@ export class HighlightOverlay {
   private showBoxModel = false;
   private isFrozen = false;
 
-  // Box model colors - very subtle, doesn't obscure content
-  private readonly MARGIN_COLOR = 'rgba(255, 155, 120, 0.25)';
-  private readonly PADDING_COLOR = 'rgba(120, 200, 140, 0.25)';
+  // Box model colors — margin (coral / orange tint), border (amber), padding (green)
+  private readonly MARGIN_COLOR = 'rgba(255, 155, 120, 0.32)';
+  private readonly BORDER_COLOR = 'rgba(255, 212, 120, 0.38)';
+  private readonly PADDING_COLOR = 'rgba(120, 200, 140, 0.32)';
 
   constructor() {
     // Create shadow DOM host for style isolation
@@ -136,8 +137,10 @@ export class HighlightOverlay {
         background: ${this.PADDING_COLOR};
       }
 
-      /* Border and content layers are transparent - we just use red outline */
-      .border-layer,
+      .border-layer {
+        background: ${this.BORDER_COLOR};
+      }
+
       .content-layer {
         background: transparent;
       }
@@ -319,12 +322,49 @@ export class HighlightOverlay {
       this.marginOverlay.style.display = 'none';
     }
 
-    // Check if there's any padding to show
     const hasPadding =
       box.padding.top > 0 ||
       box.padding.right > 0 ||
       box.padding.bottom > 0 ||
       box.padding.left > 0;
+
+    const hasBorder =
+      box.border.top > 0 || box.border.right > 0 || box.border.bottom > 0 || box.border.left > 0;
+
+    if (hasBorder) {
+      const w = rect.width;
+      const h = rect.height;
+      const bl = box.border.left;
+      const bt = box.border.top;
+      const br = box.border.right;
+      const bb = box.border.bottom;
+      const innerW = w - bl - br;
+      const innerH = h - bt - bb;
+
+      if (innerW > 0 && innerH > 0) {
+        this.borderOverlay.style.top = `${rect.top}px`;
+        this.borderOverlay.style.left = `${rect.left}px`;
+        this.borderOverlay.style.width = `${w}px`;
+        this.borderOverlay.style.height = `${h}px`;
+        const il = bl;
+        const it = bt;
+        const ir = il + innerW;
+        const ib = it + innerH;
+        this.borderOverlay.style.clipPath = `polygon(
+          0 0, 100% 0, 100% 100%, 0 100%, 0 0,
+          ${il}px ${it}px,
+          ${il}px ${ib}px,
+          ${ir}px ${ib}px,
+          ${ir}px ${it}px,
+          ${il}px ${it}px
+        )`;
+        this.borderOverlay.style.display = 'block';
+      } else {
+        this.borderOverlay.style.display = 'none';
+      }
+    } else {
+      this.borderOverlay.style.display = 'none';
+    }
 
     if (hasPadding) {
       // Padding box is inside the border
@@ -356,8 +396,6 @@ export class HighlightOverlay {
       this.paddingOverlay.style.display = 'none';
     }
 
-    // Hide unused overlays
-    this.borderOverlay.style.display = 'none';
     this.contentOverlay.style.display = 'none';
 
     // Update labels
@@ -486,8 +524,11 @@ export class HighlightOverlay {
    */
   private hideBoxModelOverlay(): void {
     this.marginOverlay.style.display = 'none';
+    this.marginOverlay.style.clipPath = 'none';
     this.borderOverlay.style.display = 'none';
+    this.borderOverlay.style.clipPath = 'none';
     this.paddingOverlay.style.display = 'none';
+    this.paddingOverlay.style.clipPath = 'none';
     this.contentOverlay.style.display = 'none';
     this.marginLabels.style.display = 'none';
     this.paddingLabels.style.display = 'none';
@@ -585,6 +626,7 @@ export class HighlightOverlay {
     const elements = [
       this.box,
       this.marginOverlay,
+      this.borderOverlay,
       this.paddingOverlay,
       this.marginLabels,
       this.paddingLabels,

@@ -36,17 +36,17 @@
   "commands": {
     "toggle-inspection": {
       "suggested_key": {
-        "default": "Ctrl+Shift+L",
-        "mac": "Command+Shift+L"
+        "default": "Alt+Shift+R",
+        "mac": "Alt+Shift+R"
       },
-      "description": "Toggle element inspection mode"
+      "description": "Toggle Redline inspection mode"
     },
     "toggle-inspection-alt": {
       "suggested_key": {
-        "default": "Alt+Shift+L",
-        "mac": "Alt+Shift+L"
+        "default": "Ctrl+Shift+L",
+        "mac": "Command+Shift+L"
       },
-      "description": "Toggle element inspection mode (alternate)"
+      "description": "Toggle Redline inspection mode (alternate)"
     }
   }
 }

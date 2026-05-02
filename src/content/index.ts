@@ -7,9 +7,25 @@ import { ElementInspector } from './ElementInspector';
 import { FloatingButton } from './FloatingButton';
 import type { Message } from '../shared/types';
 
+// Idempotency guard: the content script can be injected more than once on the
+// same page (manifest auto-inject + chrome.scripting.executeScript fallback
+// from the background/popup). Re-running the entry would mount a second
+// floating button. A DOM sentinel works across isolated-world re-runs.
+const SENTINEL_ID = 'redline-content-script-loaded';
+if (document.getElementById(SENTINEL_ID)) {
+  // Another instance already initialized on this page. Bail out.
+} else {
+  const sentinel = document.createElement('meta');
+  sentinel.id = SENTINEL_ID;
+  sentinel.setAttribute('data-redline-ui', 'true');
+  (document.head || document.documentElement).appendChild(sentinel);
+  initRedline();
+}
+
+function initRedline(): void {
+
 // Forward declare so inspector can reference it
 let floatingButton: FloatingButton;
-let isEnabled = true;
 let lastPersistedActive: boolean | null = null;
 
 /**
@@ -17,32 +33,16 @@ let lastPersistedActive: boolean | null = null;
  */
 function syncButtonStates(): void {
   const isActive = inspector.getIsActive();
-  
+
   // Single button reflects whether ruler mode is active
   floatingButton.setRedlineActive(isActive);
 
   persistActiveState(isActive);
-  
+
   chrome.runtime.sendMessage({
     type: 'STATE_CHANGED',
     isActive,
   });
-}
-
-function applyEnabledState(enabled: boolean): void {
-  isEnabled = enabled;
-  if (enabled) {
-    floatingButton.show();
-    return;
-  }
-
-  floatingButton.hide();
-  persistActiveState(false);
-  // Deactivate inspector if it's active
-  if (inspector.getIsActive()) {
-    inspector.deactivate();
-    syncButtonStates();
-  }
 }
 
 function persistActiveState(isActive: boolean): void {
@@ -51,17 +51,12 @@ function persistActiveState(isActive: boolean): void {
   void chrome.storage.local.set({ redlineIsActive: isActive });
 }
 
-async function restoreState(): Promise<void> {
-  const result = await chrome.storage.local.get({
-    redlineEnabled: true,
-    redlineIsActive: false,
-  });
-  const enabled = result.redlineEnabled !== false;
+async function restoreActiveState(): Promise<void> {
+  const result = await chrome.storage.local.get({ redlineIsActive: false });
   const active = result.redlineIsActive === true;
 
   lastPersistedActive = active;
-  applyEnabledState(enabled);
-  if (enabled && active && !inspector.getIsActive()) {
+  if (active && !inspector.getIsActive()) {
     inspector.activate();
     syncButtonStates();
   }
@@ -95,20 +90,16 @@ floatingButton = new FloatingButton({
   },
 });
 
-// Mount floating button (starts hidden) and check enabled state
+// Mount floating button — always visible on every page
 floatingButton.mount();
-restoreState();
+floatingButton.show();
+restoreActiveState();
 
-// React to enable/disable changes from other extension contexts
+// Sync inspector state across tabs/contexts
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
 
-  if (changes.redlineEnabled) {
-    const enabled = changes.redlineEnabled.newValue !== false;
-    applyEnabledState(enabled);
-  }
-
-  if (changes.redlineIsActive && isEnabled) {
+  if (changes.redlineIsActive) {
     const shouldBeActive = changes.redlineIsActive.newValue === true;
     lastPersistedActive = shouldBeActive;
     if (shouldBeActive && !inspector.getIsActive()) {
@@ -121,23 +112,31 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 });
 
+/**
+ * Shortcut/command toggle: if the bar is collapsed, expand it AND ensure
+ * redline is active (since the user explicitly invoked it). Otherwise behave
+ * as a normal toggle.
+ */
+function handleShortcutToggle(): void {
+  const wasCollapsed = floatingButton.getIsCollapsed();
+  if (wasCollapsed) {
+    floatingButton.expand();
+    if (!inspector.getIsActive()) inspector.activate();
+  } else {
+    if (inspector.getIsActive()) {
+      inspector.deactivate();
+    } else {
+      inspector.activate();
+    }
+  }
+  syncButtonStates();
+}
+
 // Listen for messages from background script
 chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) => {
   switch (message.type) {
     case 'TOGGLE_INSPECTION': {
-      if (!isEnabled) {
-        sendResponse({ success: false });
-        return;
-      }
-      const isCurrentlyActive = inspector.getIsActive();
-
-      if (isCurrentlyActive) {
-        inspector.deactivate();
-      } else {
-        inspector.activate();
-      }
-
-      syncButtonStates();
+      handleShortcutToggle();
       sendResponse({ success: true });
       return;
     }
@@ -145,37 +144,32 @@ chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) =
     case 'GET_STATE':
       sendResponse({ isActive: inspector.getIsActive() });
       return;
-
-    case 'REDLINE_ENABLED_CHANGED':
-      applyEnabledState(message.enabled);
-      sendResponse({ success: true });
-      return;
   }
 });
 
 function isToggleShortcut(e: KeyboardEvent): boolean {
-  if (e.repeat || e.code !== 'KeyL') return false;
+  if (e.repeat || !e.shiftKey) return false;
   const cmdOrCtrl = e.metaKey || e.ctrlKey;
-  const primary = cmdOrCtrl && e.shiftKey && !e.altKey;
-  const alternate = e.altKey && e.shiftKey && !cmdOrCtrl;
-  return primary || alternate;
+
+  // Primary: Alt+Shift+R (matches manifest "toggle-inspection")
+  if (e.code === 'KeyR' && e.altKey && !cmdOrCtrl) return true;
+
+  // Alternate: Ctrl+Shift+L (Windows/Linux) or Cmd+Shift+L (Mac)
+  if (e.code === 'KeyL' && cmdOrCtrl && !e.altKey) return true;
+
+  return false;
 }
 
 // Page-level backup when focus is in the tab (chrome.commands fires without passing keys to the page)
 document.addEventListener(
   'keydown',
   (e) => {
-    if (!isEnabled || !isToggleShortcut(e)) return;
+    if (!isToggleShortcut(e)) return;
     e.preventDefault();
     e.stopPropagation();
-
-    const isCurrentlyActive = inspector.getIsActive();
-    if (isCurrentlyActive) {
-      inspector.deactivate();
-    } else {
-      inspector.activate();
-    }
-    syncButtonStates();
+    handleShortcutToggle();
   },
   true,
 );
+
+} // end initRedline

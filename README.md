@@ -12,8 +12,10 @@ A Chrome extension for debugging web layout issues. Redline gives you DOM layer 
 
 ## Keyboard shortcuts
 
-- `Ctrl/Cmd + Shift + L` — toggle inspection mode
-- `Alt + Shift + L` — alternate toggle
+- `Alt + Shift + R` — toggle inspection mode
+- `Ctrl/Cmd + Shift + L` — alternate toggle
+
+If a shortcut does nothing, another extension is probably claiming it. Re-assign Redline at `chrome://extensions/shortcuts`.
 
 ## Install (development)
 
