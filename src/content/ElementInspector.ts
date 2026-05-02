@@ -166,8 +166,6 @@ export class ElementInspector {
 
     // Set cursor
     document.body.style.cursor = 'crosshair';
-
-    console.log('[Redline] Inspection mode activated');
   }
 
   /**
@@ -219,8 +217,6 @@ export class ElementInspector {
 
     // Notify listeners
     this.callbacks.onDeactivate?.();
-
-    console.log('[Redline] Inspection mode deactivated');
   }
 
   /**
@@ -264,7 +260,6 @@ export class ElementInspector {
       }
     }
 
-    console.log('[Redline] Ruler mode activated');
   }
 
   /**
@@ -298,7 +293,6 @@ export class ElementInspector {
     // Clear selection state
     this.selectedRulerLine = null;
 
-    console.log('[Redline] Ruler mode deactivated');
   }
 
   /**
@@ -345,7 +339,6 @@ export class ElementInspector {
       }
     }
 
-    console.log('[Redline] Hybrid mode activated');
   }
 
   /**
@@ -368,7 +361,6 @@ export class ElementInspector {
     // Clear selection state
     this.selectedRulerLine = null;
 
-    console.log('[Redline] Hybrid mode deactivated');
   }
 
   /**
@@ -680,7 +672,6 @@ export class ElementInspector {
           if (this.currentElement) {
             this.alignmentGuides.showGuides(this.currentElement);
           }
-          console.log('[Redline] Shift held - temporarily showing rulers');
         }
         break;
 
@@ -714,7 +705,6 @@ export class ElementInspector {
         this.isShiftHeld = false;
         this.alignmentGuides.hide();
         this.alignmentGuides.unmount();
-        console.log('[Redline] Shift released - hiding temporary rulers');
       }
     }
 
@@ -887,10 +877,7 @@ export class ElementInspector {
       markdown = this.llmFormatter.formatAnnotations(annotations);
     }
 
-    navigator.clipboard.writeText(markdown).then(() => {
-      console.log('[Redline] Copied to clipboard');
-      // Could show a toast notification here
-    });
+    navigator.clipboard.writeText(markdown);
   }
 
   private handleClearAll(): void {
@@ -941,15 +928,11 @@ export class ElementInspector {
       alignmentTypeLabel
     );
 
-    console.log(`[Redline] Selected ruler line: ${line.type} at ${line.position}px with ${line.elements.length} elements`);
   }
 
-  private handleRulerLineHover(line: RulerLine | null): void {
+  private handleRulerLineHover(_line: RulerLine | null): void {
     // This is called when hovering over ruler lines to show preview
     // The actual highlighting is done in AlignmentGuides
-    if (line) {
-      console.log(`[Redline] Hovering ruler line: ${line.type} with ${line.elements.length} elements`);
-    }
   }
 
   private handleRulerPromptSubmit(prompt: string): void {
@@ -962,9 +945,7 @@ export class ElementInspector {
     const markdown = this.llmFormatter.formatAlignmentGroup(alignmentGroup);
 
     // Copy to clipboard
-    navigator.clipboard.writeText(markdown).then(() => {
-      console.log('[Redline] Alignment info copied to clipboard');
-    });
+    navigator.clipboard.writeText(markdown);
 
     // Hide prompt and clear selection
     this.rulerPrompt.hide();

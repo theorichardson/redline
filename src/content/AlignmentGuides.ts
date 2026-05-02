@@ -248,8 +248,7 @@ export class AlignmentGuides {
   mount(): void {
     if (!this.container.parentElement) {
       document.body.appendChild(this.container);
-      console.log('[Redline] Alignment guides mounted');
-      
+
       // Add global keyboard listeners for Shift key detection
       this.boundHandleKeyDown = this.handleKeyDown.bind(this);
       this.boundHandleKeyUp = this.handleKeyUp.bind(this);

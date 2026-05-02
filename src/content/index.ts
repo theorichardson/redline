@@ -121,10 +121,6 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 });
 
-// Expose for debugging
-(window as unknown as Record<string, unknown>).__redlineInspector = inspector;
-(window as unknown as Record<string, unknown>).__redlineFloatingButton = floatingButton;
-
 // Listen for messages from background script
 chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) => {
   switch (message.type) {
@@ -182,8 +178,4 @@ document.addEventListener(
     syncButtonStates();
   },
   true,
-);
-
-console.log(
-  '[Redline] Content script loaded. Toggle: ⌘⇧L / Ctrl+Shift+L or ⌥⇧L / Alt+Shift+L (see chrome://extensions/shortcuts if a chord does nothing).',
 );

@@ -11,7 +11,6 @@ async function toggleInspection(tabId: number): Promise<void> {
     await chrome.tabs.sendMessage(tabId, { type: 'TOGGLE_INSPECTION' });
     return;
   } catch {
-    console.log('[Redline] Injecting content script into tab', tabId);
     try {
       await chrome.scripting.executeScript({
         target: { tabId },
@@ -74,5 +73,3 @@ chrome.runtime.onMessage.addListener((message, messageSender, sendResponse) => {
     });
   }
 });
-
-console.log('[Redline] Service worker initialized');

@@ -2,9 +2,10 @@
   "manifest_version": 3,
   "name": "Redline",
   "version": "1.0.0",
-  "description": "Debug web layout issues with DOM layer navigation and LLM-optimized context extraction",
+  "description": "Debug web layout issues with DOM layer navigation and LLM-optimized context extraction.",
   "icons": {
     "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
@@ -14,13 +15,13 @@
     "clipboardWrite",
     "scripting"
   ],
-  "host_permissions": ["<all_urls>"],
+  "host_permissions": ["http://*/*", "https://*/*"],
   "background": {
     "service_worker": "background.js",
     "type": "module"
   },
   "content_scripts": [{
-    "matches": ["<all_urls>"],
+    "matches": ["http://*/*", "https://*/*"],
     "js": ["content.js"],
     "run_at": "document_idle"
   }],
@@ -29,6 +30,7 @@
     "default_title": "Redline",
     "default_icon": {
       "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
       "48": "icons/icon48.png"
     }
   },

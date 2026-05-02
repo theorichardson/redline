@@ -15,7 +15,6 @@ async function activateInspector(tabId: number): Promise<void> {
     await chrome.tabs.sendMessage(tabId, { type: 'TOGGLE_INSPECTION' });
   } catch {
     // Content script not loaded, inject it first
-    console.log('[Redline Popup] Injecting content script');
     try {
       await chrome.scripting.executeScript({
         target: { tabId },

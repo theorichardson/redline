@@ -214,7 +214,6 @@ export class HighlightOverlay {
   mount(): void {
     if (!this.container.parentElement) {
       document.body.appendChild(this.container);
-      console.log('[Redline] Overlay mounted');
     }
     // Recreate tooltip if it was destroyed
     if (!this.tooltip) {
