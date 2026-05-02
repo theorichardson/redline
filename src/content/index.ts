@@ -18,7 +18,7 @@ let lastPersistedActive: boolean | null = null;
 function syncButtonStates(): void {
   const isActive = inspector.getIsActive();
   
-  // Single button shows active when hybrid mode is on
+  // Single button reflects whether ruler mode is active
   floatingButton.setRedlineActive(isActive);
 
   persistActiveState(isActive);
@@ -81,7 +81,7 @@ floatingButton = new FloatingButton({
       // Turn off redline mode
       inspector.deactivate();
     } else {
-      // Turn on redline mode (not hybrid - Shift will show rulers)
+      // Turn on inspection (alignment guides + layer hover)
       inspector.activate();
     }
     

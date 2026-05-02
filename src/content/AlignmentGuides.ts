@@ -26,6 +26,11 @@ export interface RulerLineCallbacks {
   onLineHover?: (line: RulerLine | null) => void;
 }
 
+/** When ruler interaction is off, guides are visual-only (no click/hover on lines). */
+export interface AlignmentGuidesOptions {
+  enableRulerInteraction?: boolean;
+}
+
 export class AlignmentGuides {
   private container: HTMLElement;
   private shadow: ShadowRoot;
@@ -33,6 +38,7 @@ export class AlignmentGuides {
   private linesContainer: HTMLElement;
   private labelsContainer: HTMLElement;
   private callbacks: RulerLineCallbacks;
+  private readonly enableRulerInteraction: boolean;
 
   private guideColor = '#e63946';
   private readonly ALIGNMENT_THRESHOLD = 2; // pixels for alignment matching
@@ -52,8 +58,9 @@ export class AlignmentGuides {
   private boundHandleKeyDown: ((e: KeyboardEvent) => void) | null = null;
   private boundHandleKeyUp: ((e: KeyboardEvent) => void) | null = null;
 
-  constructor(callbacks: RulerLineCallbacks = {}) {
+  constructor(callbacks: RulerLineCallbacks = {}, options?: AlignmentGuidesOptions) {
     this.callbacks = callbacks;
+    this.enableRulerInteraction = options?.enableRulerInteraction ?? true;
 
     // Create shadow DOM host for style isolation
     this.container = document.createElement('div');
@@ -80,7 +87,9 @@ export class AlignmentGuides {
 
     // Container for lines
     this.linesContainer = document.createElement('div');
-    this.linesContainer.className = 'guides-lines';
+    this.linesContainer.className = this.enableRulerInteraction
+      ? 'guides-lines'
+      : 'guides-lines guides-lines--passive';
 
     // Container for labels
     this.labelsContainer = document.createElement('div');
@@ -110,6 +119,23 @@ export class AlignmentGuides {
         height: 100%;
         pointer-events: none;
         z-index: 1;
+      }
+
+      .guides-lines--passive .guide-line {
+        pointer-events: none !important;
+        cursor: default !important;
+      }
+
+      @keyframes redline-guides-shake {
+        0%, 100% { transform: translateX(0); }
+        20% { transform: translateX(-4px); }
+        40% { transform: translateX(4px); }
+        60% { transform: translateX(-3px); }
+        80% { transform: translateX(3px); }
+      }
+
+      .highlight-box.shake {
+        animation: redline-guides-shake 0.3s ease-in-out;
       }
 
       .guides-labels {
@@ -314,6 +340,15 @@ export class AlignmentGuides {
     this.selectedLine = null;
     this.hoveredLine = null;
     this.currentElement = null;
+  }
+
+  /** Brief nudge animation on the highlighted element box (layer navigation bounds hint). */
+  shake(): void {
+    if (this.highlightBox.style.display === 'none') return;
+    this.highlightBox.classList.remove('shake');
+    void this.highlightBox.offsetWidth;
+    this.highlightBox.classList.add('shake');
+    window.setTimeout(() => this.highlightBox.classList.remove('shake'), 320);
   }
 
   getSelectedLine(): RulerLine | null {
@@ -646,20 +681,20 @@ export class AlignmentGuides {
     };
     this.rulerLines.push(rulerLine);
 
-    // Add hover handlers for preview (check global Shift state)
-    line.addEventListener('mouseenter', () => {
-      this.handleLineHover(rulerLine);
-    });
+    if (this.enableRulerInteraction) {
+      line.addEventListener('mouseenter', () => {
+        this.handleLineHover(rulerLine);
+      });
 
-    line.addEventListener('mouseleave', () => {
-      this.handleLineHover(null);
-    });
+      line.addEventListener('mouseleave', () => {
+        this.handleLineHover(null);
+      });
 
-    // Add click handler - pass click coordinates for prompt positioning
-    line.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.handleLineClick(rulerLine, { x: e.clientX, y: e.clientY });
-    });
+      line.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.handleLineClick(rulerLine, { x: e.clientX, y: e.clientY });
+      });
+    }
 
     this.linesContainer.appendChild(line);
     return line;
