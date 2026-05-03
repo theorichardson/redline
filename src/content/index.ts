@@ -90,9 +90,25 @@ floatingButton = new FloatingButton({
   },
 });
 
-// Mount floating button — always visible on every page
+// Mount floating button — visibility is user-controlled via popup toggle
+const FAB_HIDDEN_KEY = 'redline-floating-button-hidden';
+
 floatingButton.mount();
-floatingButton.show();
+
+void chrome.storage.local.get({ [FAB_HIDDEN_KEY]: false }).then((result) => {
+  const hidden = result[FAB_HIDDEN_KEY] === true;
+  if (hidden) {
+    floatingButton.hide();
+    // If the tab is hidden, inspector shouldn't be active either
+    if (inspector.getIsActive()) {
+      inspector.deactivate();
+      syncButtonStates();
+    }
+  } else {
+    floatingButton.show();
+  }
+});
+
 restoreActiveState();
 
 // Sync inspector state across tabs/contexts
@@ -108,6 +124,19 @@ chrome.storage.onChanged.addListener((changes, area) => {
     } else if (!shouldBeActive && inspector.getIsActive()) {
       inspector.deactivate();
       syncButtonStates();
+    }
+  }
+
+  if (changes[FAB_HIDDEN_KEY]) {
+    const hidden = changes[FAB_HIDDEN_KEY].newValue === true;
+    if (hidden) {
+      if (inspector.getIsActive()) {
+        inspector.deactivate();
+        syncButtonStates();
+      }
+      floatingButton.hide();
+    } else {
+      floatingButton.show();
     }
   }
 });

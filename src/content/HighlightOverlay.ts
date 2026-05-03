@@ -2,7 +2,6 @@ import { Tooltip, createTooltipContent } from './Tooltip';
 import type { TypographyStyles } from '../shared/types';
 
 export interface HighlightTooltipOpts {
-  showTypographyInTooltip?: boolean;
   typography?: TypographyStyles | null;
 }
 
@@ -567,7 +566,7 @@ export class HighlightOverlay {
     ];
 
     const t = tooltipOpts?.typography;
-    if (tooltipOpts?.showTypographyInTooltip && t) {
+    if (t) {
       parts.push({ label: 'font-size:', value: t.fontSize });
       parts.push({ label: 'font:', value: this.truncateFontFamilyForTooltip(t.fontFamily) });
       if (t.lineHeight && t.lineHeight !== 'normal') {

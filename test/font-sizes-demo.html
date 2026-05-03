@@ -41,13 +41,13 @@
   <ul class="instructions">
     <li>Load the unpacked extension from <code>dist/</code>, activate Redline, then inspect these blocks.</li>
     <li><strong>Shift</strong> (hold): alignment guides</li>
-    <li><strong>Alt / Option</strong> (hold): font-size, font, and line-height in the hover tooltip (only when the node has text)</li>
+    <li>Hover tooltip shows <strong>font-size</strong>, <strong>font</strong>, and <strong>line-height</strong> whenever the hovered node has text</li>
     <li><strong>Cmd/Ctrl</strong> (hold): freeze the hovered element</li>
     <li>Open the panel and expand <strong>Details</strong> for the same typography fields when an element has text.</li>
   </ul>
 
   <section>
-    <p class="muted">Empty flex row (no text nodes) — Alt should not add typography to the tooltip.</p>
+    <p class="muted">Empty flex row (no text nodes) — the hover tooltip omits typography for this row.</p>
     <div class="empty-row">
       <div></div>
       <div></div>
@@ -55,7 +55,7 @@
   </section>
 
   <section>
-    <p>This paragraph uses the page default (Georgia). Hover it and hold Alt.</p>
+    <p>This paragraph uses the page default (Georgia). Hover to see typography in the tooltip.</p>
     <p class="nested">Mixed: outer Georgia, <span>inner 18px Helvetica span</span>.</p>
   </section>
 

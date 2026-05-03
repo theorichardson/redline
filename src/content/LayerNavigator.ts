@@ -3,7 +3,7 @@ import type { AncestorNode } from '../shared/types';
 /**
  * LayerNavigator - Navigate through overlapping/nested elements at a point
  * Uses document.elementsFromPoint() to get all elements at cursor position
- * Allows cycling through layers with scroll wheel or arrow keys
+ * Allows cycling through layers with arrow keys (after hover picks the stack)
  */
 export class LayerNavigator {
   private elementStack: Element[] = [];

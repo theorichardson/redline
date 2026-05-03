@@ -4,6 +4,48 @@
  */
 
 const activateBtn = document.getElementById('activate-btn') as HTMLButtonElement;
+const tabToggleRow = document.getElementById('tab-toggle-row') as HTMLDivElement | null;
+const tabToggle = document.getElementById('tab-toggle') as HTMLDivElement | null;
+
+const FAB_HIDDEN_KEY = 'redline-floating-button-hidden';
+
+function renderTabToggle(hidden: boolean): void {
+  const visible = !hidden;
+  if (tabToggle) tabToggle.classList.toggle('active', visible);
+  if (tabToggleRow) tabToggleRow.setAttribute('aria-pressed', String(visible));
+}
+
+// Load current tab visibility preference
+chrome.storage.local.get({ [FAB_HIDDEN_KEY]: false }, (result) => {
+  renderTabToggle(result[FAB_HIDDEN_KEY] === true);
+});
+
+// Reflect changes from other contexts
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return;
+  if (changes[FAB_HIDDEN_KEY]) {
+    renderTabToggle(changes[FAB_HIDDEN_KEY].newValue === true);
+  }
+});
+
+async function toggleTabVisibility(): Promise<void> {
+  const result = await chrome.storage.local.get({ [FAB_HIDDEN_KEY]: false });
+  const currentlyHidden = result[FAB_HIDDEN_KEY] === true;
+  const nextHidden = !currentlyHidden;
+  await chrome.storage.local.set({ [FAB_HIDDEN_KEY]: nextHidden });
+  renderTabToggle(nextHidden);
+}
+
+tabToggleRow?.addEventListener('click', () => {
+  void toggleTabVisibility();
+});
+
+tabToggleRow?.addEventListener('keydown', (e) => {
+  if (e.key === ' ' || e.key === 'Enter') {
+    e.preventDefault();
+    void toggleTabVisibility();
+  }
+});
 
 /**
  * Ensure content script is loaded and toggle inspection
@@ -57,11 +99,12 @@ activateBtn?.addEventListener('click', async () => {
 });
 
 function updateButtonState(isActive: boolean): void {
+  const label = document.getElementById('activate-label');
   if (isActive) {
     activateBtn.classList.add('active');
-    activateBtn.textContent = 'Inspector Active';
+    if (label) label.textContent = 'Inspector Active';
   } else {
     activateBtn.classList.remove('active');
-    activateBtn.textContent = 'Activate Inspector';
+    if (label) label.textContent = 'Activate Inspector';
   }
 }
