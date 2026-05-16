@@ -113,4 +113,11 @@ chrome.runtime.onMessage.addListener((message, messageSender, sendResponse) => {
       tabId: messageSender.tab.id,
     });
   }
+
+  // Onboarding step 3: open Chrome's per-extension shortcuts page. Content
+  // scripts can't navigate to chrome:// URLs themselves, so we proxy through
+  // the service worker.
+  if (message.type === 'OPEN_SHORTCUTS_PAGE') {
+    void chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
+  }
 });

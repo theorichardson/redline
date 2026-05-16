@@ -208,6 +208,53 @@
       color: var(--text-muted);
       line-height: 1.5;
     }
+
+    /* Developer section — visible only in dev builds (toggled in popup.ts). */
+    .dev-section {
+      display: none;
+    }
+
+    .dev-section.dev-visible {
+      display: block;
+    }
+
+    .dev-section .section-title {
+      color: #f1c40f;
+    }
+
+    .dev-section .card {
+      background: rgba(241, 196, 15, 0.08);
+      border: 1px solid rgba(241, 196, 15, 0.2);
+    }
+
+    .dev-btn-row {
+      display: flex;
+      gap: 8px;
+      padding: 12px 14px;
+    }
+
+    .dev-btn {
+      flex: 1;
+      padding: 8px 10px;
+      background: rgba(241, 196, 15, 0.15);
+      border: 1px solid rgba(241, 196, 15, 0.3);
+      border-radius: 8px;
+      color: #fff;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .dev-btn:hover {
+      background: rgba(241, 196, 15, 0.25);
+    }
+
+    .dev-btn:focus,
+    .dev-btn:focus-visible {
+      outline: none;
+    }
   </style>
 </head>
 <body style="background:#000;margin:0;width:300px;">
@@ -260,6 +307,23 @@
     <p class="footer">
       Redline doesn't track any of your data.
     </p>
+
+    <!-- Developer tools: only revealed in dev builds (see popup.ts). -->
+    <div class="dev-section" id="dev-section">
+      <div class="section-title">Developer</div>
+      <div class="card">
+        <div class="row">
+          <div class="row-text">
+            <span class="row-label">Onboarding tour</span>
+            <span class="row-sublabel">Test the first-run flow on this tab.</span>
+          </div>
+        </div>
+        <div class="dev-btn-row">
+          <button type="button" class="dev-btn" id="dev-start-onboarding">Start</button>
+          <button type="button" class="dev-btn" id="dev-clear-onboarding">Clear</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="popup.js" defer></script>

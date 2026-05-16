@@ -147,7 +147,8 @@ export interface AlignmentGroup {
 export type Message =
   | { type: 'TOGGLE_INSPECTION' }
   | { type: 'GET_STATE' }
-  | { type: 'STATE_RESPONSE'; isActive: boolean };
+  | { type: 'STATE_RESPONSE'; isActive: boolean }
+  | { type: 'OPEN_SHORTCUTS_PAGE' };
 
 // Extension settings
 export interface RedlineSettings {

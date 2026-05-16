@@ -5,6 +5,11 @@
 
 import { ElementInspector } from './ElementInspector';
 import { FloatingButton } from './FloatingButton';
+import {
+  OnboardingTooltip,
+  ONBOARDING_STORAGE_KEY,
+  type OnboardingStep,
+} from './OnboardingTooltip';
 import type { Message } from '../shared/types';
 
 // Idempotency guard: the content script can be injected more than once on the
@@ -38,6 +43,11 @@ function syncButtonStates(): void {
   floatingButton.setRedlineActive(isActive);
 
   persistActiveState(isActive);
+
+  // Onboarding step 1 → 2 advances the moment the inspector turns on,
+  // regardless of whether activation came from the FAB, the popup, or a
+  // keyboard shortcut.
+  if (isActive) onboarding.notifyInspectorActivated();
 
   chrome.runtime.sendMessage({
     type: 'STATE_CHANGED',
@@ -90,10 +100,26 @@ floatingButton = new FloatingButton({
   },
 });
 
+// Onboarding overlay (anchored above the FAB). Always instantiate so it can
+// react to chrome.storage changes, but only renders DOM while step > 0.
+const onboarding = new OnboardingTooltip({
+  onOpenShortcuts: () => {
+    chrome.runtime.sendMessage({ type: 'OPEN_SHORTCUTS_PAGE' });
+  },
+});
+
 // Mount floating button — visibility is user-controlled via popup toggle
 const FAB_HIDDEN_KEY = 'redline-floating-button-hidden';
+const FAB_COLLAPSED_KEY = 'redline-floating-button-collapsed';
 
 floatingButton.mount();
+
+// Hydrate onboarding state from storage on every page load.
+void chrome.storage.local.get({ [ONBOARDING_STORAGE_KEY]: 0 }).then((result) => {
+  const raw = result[ONBOARDING_STORAGE_KEY];
+  const step = (typeof raw === 'number' && raw >= 0 && raw <= 3 ? raw : 0) as OnboardingStep;
+  onboarding.applyStep(step);
+});
 
 void chrome.storage.local.get({ [FAB_HIDDEN_KEY]: false }).then((result) => {
   const hidden = result[FAB_HIDDEN_KEY] === true;
@@ -139,6 +165,22 @@ chrome.storage.onChanged.addListener((changes, area) => {
       floatingButton.show();
     }
   }
+
+  if (changes[ONBOARDING_STORAGE_KEY]) {
+    const raw = changes[ONBOARDING_STORAGE_KEY].newValue;
+    const step = (typeof raw === 'number' && raw >= 0 && raw <= 3 ? raw : 0) as OnboardingStep;
+    onboarding.applyStep(step);
+  }
+
+  // The FAB normally only loads its collapse state at mount, so external
+  // writes (e.g. the dev tool kicking off onboarding) wouldn't expand
+  // already-loaded tabs. Sync collapse → expand here.
+  if (changes[FAB_COLLAPSED_KEY]) {
+    const collapsed = changes[FAB_COLLAPSED_KEY].newValue === true;
+    if (!collapsed && floatingButton.getIsCollapsed()) {
+      floatingButton.expand();
+    }
+  }
 });
 
 /**
@@ -159,6 +201,9 @@ function handleShortcutToggle(): void {
     }
   }
   syncButtonStates();
+  // Step 3 (set a keyboard shortcut) completes the moment the user presses
+  // any bound shortcut on the page — that's how they "test" it.
+  onboarding.notifyShortcutUsed();
 }
 
 // Listen for messages from background script

@@ -189,3 +189,41 @@ document.getElementById('open-shortcuts')?.addEventListener('click', (e) => {
   e.preventDefault();
   openShortcutsPage();
 });
+
+/**
+ * Developer-only onboarding controls.
+ *
+ * `import.meta.env.MODE` is replaced at build time by Vite with the literal
+ * mode string. `npm run dev` runs `vite build --watch --mode development`
+ * (so MODE === 'development' resolves to `true` and tree-shaking keeps the
+ * branch); `npm run build` uses the default `production` mode, so the
+ * branch is dead code and the entire dev section — including DOM lookups,
+ * listeners, and storage writes — is dropped from the shipped bundle.
+ */
+const ONBOARDING_STORAGE_KEY = 'redline-onboarding-step';
+const FAB_COLLAPSED_KEY = 'redline-floating-button-collapsed';
+
+if (import.meta.env.MODE === 'development') {
+  const devSection = document.getElementById('dev-section');
+  devSection?.classList.add('dev-visible');
+
+  document
+    .getElementById('dev-start-onboarding')
+    ?.addEventListener('click', async () => {
+      // Make sure the FAB is showing and expanded across all tabs so the
+      // tooltip has something to anchor to.
+      await chrome.storage.local.set({
+        [FAB_HIDDEN_KEY]: false,
+        [FAB_COLLAPSED_KEY]: false,
+        [ONBOARDING_STORAGE_KEY]: 1,
+      });
+      window.close();
+    });
+
+  document
+    .getElementById('dev-clear-onboarding')
+    ?.addEventListener('click', async () => {
+      await chrome.storage.local.set({ [ONBOARDING_STORAGE_KEY]: 0 });
+      window.close();
+    });
+}
