@@ -12,8 +12,29 @@
  */
 
 export const ONBOARDING_STORAGE_KEY = 'redline-onboarding-step';
+export const ONBOARDING_STEP2_PROGRESS_KEY = 'redline-onboarding-step2-progress';
 
 export type OnboardingStep = 0 | 1 | 2 | 3;
+
+/**
+ * Checklist state for step 2. Each flag flips when the user completes the
+ * corresponding action; once all are true the tooltip advances to step 3.
+ * Persisted under ONBOARDING_STEP2_PROGRESS_KEY so progress survives page
+ * navigation.
+ */
+export interface Step2Progress {
+  hovered: boolean;
+  usedUp: boolean;
+  usedDown: boolean;
+  exited: boolean;
+}
+
+export const EMPTY_STEP2_PROGRESS: Step2Progress = {
+  hovered: false,
+  usedUp: false,
+  usedDown: false,
+  exited: false,
+};
 
 export interface OnboardingCallbacks {
   /** Called when the user dismisses or completes the flow (step → 0). */
@@ -26,10 +47,18 @@ export interface OnboardingCallbacks {
 
 export class OnboardingTooltip {
   private step: OnboardingStep = 0;
+  private step2Progress: Step2Progress = { ...EMPTY_STEP2_PROGRESS };
+  private autoAdvanceTimer: number | null = null;
+  private stepTransitionTimer: number | null = null;
   private container: HTMLElement | null = null;
   private rafId: number | null = null;
   private boundHandleResize: (() => void) | null = null;
   private callbacks: OnboardingCallbacks;
+
+  // Total fade-out duration for inter-step crossfade. Should stay <= the
+  // opacity transition declared on #redline-onboarding-tooltip so the
+  // class removal can ease all the way back in without being clipped.
+  private static readonly STEP_FADE_MS = 240;
 
   constructor(callbacks: OnboardingCallbacks = {}) {
     this.callbacks = callbacks;
@@ -51,16 +80,41 @@ export class OnboardingTooltip {
   }
 
   /**
-   * Set the current step and persist it to chrome.storage.local.
+   * Apply step 2 progress coming from storage. Re-renders only the
+   * checkbox states (no full HTML rebuild) so any animations on the
+   * checkmark trigger naturally.
+   */
+  applyStep2Progress(progress: Step2Progress): void {
+    this.step2Progress = { ...progress };
+    if (this.step === 2) {
+      this.applyChecklistDOMState();
+      this.maybeAutoAdvanceFromStep2();
+    }
+  }
+
+  /**
+   * Set the current step and persist it to chrome.storage.local. When
+   * entering step 2 fresh, the checklist progress is reset.
    */
   async setStep(step: OnboardingStep): Promise<void> {
+    const writes: Record<string, unknown> = { [ONBOARDING_STORAGE_KEY]: step };
+
+    // Entering step 2 from any other step → start the checklist clean.
+    // Leaving onboarding (step 0) → clear stale checklist state too.
+    if (step === 2 && this.step !== 2) {
+      this.step2Progress = { ...EMPTY_STEP2_PROGRESS };
+      writes[ONBOARDING_STEP2_PROGRESS_KEY] = this.step2Progress;
+    } else if (step === 0) {
+      this.step2Progress = { ...EMPTY_STEP2_PROGRESS };
+      writes[ONBOARDING_STEP2_PROGRESS_KEY] = this.step2Progress;
+    }
+
     if (this.step === step) {
-      // Still ensure storage matches, in case caller is forcing a write.
-      await chrome.storage.local.set({ [ONBOARDING_STORAGE_KEY]: step });
+      await chrome.storage.local.set(writes);
       return;
     }
     this.step = step;
-    await chrome.storage.local.set({ [ONBOARDING_STORAGE_KEY]: step });
+    await chrome.storage.local.set(writes);
     this.render();
     if (step === 0) {
       this.callbacks.onComplete?.();
@@ -72,6 +126,28 @@ export class OnboardingTooltip {
   /** Inspector just turned on — advance from step 1 to step 2. */
   notifyInspectorActivated(): void {
     if (this.step === 1) void this.setStep(2);
+  }
+
+  /** Step 2 checklist: user hovered over an element. */
+  notifyHover(): void {
+    if (this.step !== 2 || this.step2Progress.hovered) return;
+    void this.updateStep2Progress({ hovered: true });
+  }
+
+  /** Step 2 checklist: user pressed an arrow key while inspecting. */
+  notifyArrow(direction: 'up' | 'down' | 'left' | 'right'): void {
+    if (this.step !== 2) return;
+    if (direction === 'up' && !this.step2Progress.usedUp) {
+      void this.updateStep2Progress({ usedUp: true });
+    } else if (direction === 'down' && !this.step2Progress.usedDown) {
+      void this.updateStep2Progress({ usedDown: true });
+    }
+  }
+
+  /** Step 2 checklist: user pressed Escape to exit Redline. */
+  notifyEscape(): void {
+    if (this.step !== 2 || this.step2Progress.exited) return;
+    void this.updateStep2Progress({ exited: true });
   }
 
   /**
@@ -87,6 +163,14 @@ export class OnboardingTooltip {
    */
   unmount(): void {
     this.stopTracking();
+    if (this.autoAdvanceTimer !== null) {
+      window.clearTimeout(this.autoAdvanceTimer);
+      this.autoAdvanceTimer = null;
+    }
+    if (this.stepTransitionTimer !== null) {
+      window.clearTimeout(this.stepTransitionTimer);
+      this.stepTransitionTimer = null;
+    }
     if (this.boundHandleResize) {
       window.removeEventListener('resize', this.boundHandleResize);
       this.boundHandleResize = null;
@@ -98,21 +182,149 @@ export class OnboardingTooltip {
   }
 
   /**
-   * Render or hide the tooltip based on the current step.
+   * Persist a partial step-2 progress update, then sync the local DOM. The
+   * storage write is the source of truth so other tabs see the same
+   * checklist state.
+   */
+  private async updateStep2Progress(patch: Partial<Step2Progress>): Promise<void> {
+    this.step2Progress = { ...this.step2Progress, ...patch };
+    await chrome.storage.local.set({
+      [ONBOARDING_STEP2_PROGRESS_KEY]: this.step2Progress,
+    });
+    if (this.step === 2) {
+      this.applyChecklistDOMState();
+      this.maybeAutoAdvanceFromStep2();
+    }
+  }
+
+  /**
+   * Toggle `.completed` on each checklist row to match progress. The DOM
+   * structure is built once in renderStepHTML; this only flips classes so
+   * CSS transitions on the checkmark fire naturally.
+   */
+  private applyChecklistDOMState(): void {
+    if (!this.container) return;
+    const rules: Array<[keyof Step2Progress, boolean]> = [
+      ['hovered', this.step2Progress.hovered],
+      ['usedDown', this.step2Progress.usedDown],
+      ['usedUp', this.step2Progress.usedUp],
+      ['exited', this.step2Progress.exited],
+    ];
+    for (const [key, done] of rules) {
+      const row = this.container.querySelector<HTMLElement>(
+        `.rl-onb-check-item[data-key="${key}"]`,
+      );
+      row?.classList.toggle('completed', done);
+    }
+  }
+
+  /**
+   * Auto-advance to step 3 once every step-2 checklist item is checked.
+   * Uses a short delay so the user perceives the final tick before the
+   * tooltip swaps content.
+   */
+  private maybeAutoAdvanceFromStep2(): void {
+    const { hovered, usedUp, usedDown, exited } = this.step2Progress;
+    if (!(hovered && usedUp && usedDown && exited)) return;
+    if (this.autoAdvanceTimer !== null) return; // already scheduled
+    this.autoAdvanceTimer = window.setTimeout(() => {
+      this.autoAdvanceTimer = null;
+      if (this.step === 2) void this.setStep(3);
+    }, 700);
+  }
+
+  /**
+   * Render or hide the tooltip based on the current step. When transitioning
+   * between two visible steps (or stepping out to dismissal), this performs
+   * a brief crossfade rather than a hard swap so the change feels guided.
    */
   private render(): void {
     if (this.step === 0) {
-      this.unmount();
+      this.fadeOutAndUnmount();
       return;
     }
 
+    if (this.container && this.container.classList.contains('visible')) {
+      this.beginStepCrossfade();
+      return;
+    }
+
+    this.renderImmediate();
+  }
+
+  private renderImmediate(): void {
     this.ensureContainer();
     if (!this.container) return;
-
-    const html = this.renderStepHTML(this.step);
-    this.container.innerHTML = html;
-    this.attachStepListeners();
+    this.swapStepContent();
     this.startTracking();
+  }
+
+  /**
+   * Replace inner content and rewire per-step listeners without touching
+   * the outer container's class state — used both for first render and
+   * after the fade-out half of a crossfade.
+   */
+  private swapStepContent(): void {
+    if (!this.container) return;
+    this.container.innerHTML = this.renderStepHTML(this.step);
+    this.attachStepListeners();
+    if (this.step === 2) {
+      this.applyChecklistDOMState();
+      this.maybeAutoAdvanceFromStep2();
+    }
+  }
+
+  /**
+   * Crossfade from the currently-rendered step to whatever this.step is
+   * now. The container is already mounted and visible; we briefly add
+   * `.step-fading` (opacity 0 + slight downward translate), wait for the
+   * CSS transition, swap the inner HTML, and remove the class so the new
+   * content fades back in to its anchored position.
+   */
+  private beginStepCrossfade(): void {
+    if (this.stepTransitionTimer !== null) {
+      window.clearTimeout(this.stepTransitionTimer);
+      this.stepTransitionTimer = null;
+    }
+    const c = this.container;
+    if (!c) {
+      this.renderImmediate();
+      return;
+    }
+    c.classList.add('step-fading');
+    this.stepTransitionTimer = window.setTimeout(() => {
+      this.stepTransitionTimer = null;
+      // Bail if the user dismissed mid-fade — the unmount path will run.
+      if (!this.container || this.step === 0) return;
+      this.swapStepContent();
+      // Two rAFs so the browser commits the swapped DOM before easing the
+      // class removal back to opacity 1 (otherwise we'd snap, not fade).
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          this.container?.classList.remove('step-fading');
+        });
+      });
+    }, OnboardingTooltip.STEP_FADE_MS);
+  }
+
+  /**
+   * Dismiss with a brief fade-out instead of an instant remove() so step-3
+   * → done still feels guided rather than abrupt.
+   */
+  private fadeOutAndUnmount(): void {
+    if (!this.container) {
+      this.unmount();
+      return;
+    }
+    if (this.stepTransitionTimer !== null) {
+      window.clearTimeout(this.stepTransitionTimer);
+      this.stepTransitionTimer = null;
+    }
+    this.container.classList.add('step-fading');
+    this.stepTransitionTimer = window.setTimeout(() => {
+      this.stepTransitionTimer = null;
+      this.unmount();
+    }, OnboardingTooltip.STEP_FADE_MS);
   }
 
   private ensureContainer(): void {
@@ -172,13 +384,24 @@ export class OnboardingTooltip {
         line-height: 1.45;
         pointer-events: auto;
         opacity: 0;
-        transform: translate(-50%, 4px);
-        transition: opacity 0.18s ease, transform 0.18s ease;
+        transform: translate(-50%, 3px);
+        transition: opacity 0.26s ease-in-out, transform 0.26s ease-in-out;
       }
 
       #redline-onboarding-tooltip.visible {
         opacity: 1;
         transform: translate(-50%, 0);
+      }
+
+      /* Mid-step crossfade: while .step-fading is on, the tooltip drifts
+         a couple of px down and fades to invisible. We swap the inner HTML
+         while it's invisible, then remove .step-fading so the new step
+         eases back in to its anchored position. The motion is intentionally
+         small (~3px) and the easing is symmetric ease-in-out so the
+         transition reads as a gentle breath rather than a flash. */
+      #redline-onboarding-tooltip.visible.step-fading {
+        opacity: 0;
+        transform: translate(-50%, 3px);
       }
 
       #redline-onboarding-tooltip::after {
@@ -213,6 +436,72 @@ export class OnboardingTooltip {
         font-size: 13px;
         color: rgba(255, 255, 255, 0.78);
         margin-bottom: 0;
+      }
+
+      #redline-onboarding-tooltip .rl-onb-checklist {
+        list-style: none;
+        margin: 12px 0 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      #redline-onboarding-tooltip .rl-onb-check-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 9px;
+        font-size: 12.5px;
+        line-height: 1.4;
+        color: rgba(255, 255, 255, 0.78);
+        transition: color 0.18s ease;
+      }
+
+      #redline-onboarding-tooltip .rl-onb-check-item.completed {
+        color: rgba(255, 255, 255, 0.45);
+      }
+
+      #redline-onboarding-tooltip .rl-onb-check-item.completed .rl-onb-check-label {
+        text-decoration: line-through;
+        text-decoration-color: rgba(255, 255, 255, 0.35);
+      }
+
+      #redline-onboarding-tooltip .rl-onb-check-circle {
+        flex-shrink: 0;
+        width: 16px;
+        height: 16px;
+        margin-top: 1px;
+        border-radius: 50%;
+        border: 1.5px solid rgba(255, 255, 255, 0.35);
+        background: transparent;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #ffffff;
+        transition: background 0.2s ease, border-color 0.2s ease,
+                    transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+
+      #redline-onboarding-tooltip .rl-onb-check-icon {
+        opacity: 0;
+        transform: scale(0.6);
+        transition: opacity 0.18s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+
+      #redline-onboarding-tooltip .rl-onb-check-item.completed .rl-onb-check-circle {
+        background: #e63946;
+        border-color: #e63946;
+        transform: scale(1.05);
+      }
+
+      #redline-onboarding-tooltip .rl-onb-check-item.completed .rl-onb-check-icon {
+        opacity: 1;
+        transform: scale(1);
+      }
+
+      #redline-onboarding-tooltip .rl-onb-check-label {
+        flex: 1;
+        min-width: 0;
       }
 
       #redline-onboarding-tooltip kbd {
@@ -312,20 +601,38 @@ export class OnboardingTooltip {
           <div class="rl-onb-body">Tap the icon below to turn on inspection mode.</div>
         `;
 
-      case 2:
+      case 2: {
+        // Inline check icon — white tick that fades in via CSS when the
+        // row picks up the .completed class.
+        const checkIcon = `
+          <svg class="rl-onb-check-icon" width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="2.5 6.5 5 9 9.5 3.5"/>
+          </svg>
+        `;
         return `
           ${close}
           <div class="rl-onb-step">Step 2 of 3</div>
-          <div class="rl-onb-title">Inspect any element</div>
-          <div class="rl-onb-body">
-            Hover over any element to see its layout. Use
-            <kbd>↑</kbd><kbd>↓</kbd> to walk parents and children,
-            <kbd>←</kbd><kbd>→</kbd> for siblings, and <kbd>Esc</kbd> to exit.
-          </div>
-          <div class="rl-onb-actions">
-            <button type="button" class="rl-onb-btn rl-onb-btn--primary" data-action="next">Got it</button>
-          </div>
+          <div class="rl-onb-title">Try the inspector</div>
+          <ul class="rl-onb-checklist">
+            <li class="rl-onb-check-item" data-key="hovered">
+              <span class="rl-onb-check-circle">${checkIcon}</span>
+              <span class="rl-onb-check-label">Hover any element to see its layout</span>
+            </li>
+            <li class="rl-onb-check-item" data-key="usedDown">
+              <span class="rl-onb-check-circle">${checkIcon}</span>
+              <span class="rl-onb-check-label">Press <kbd>↓</kbd> to drill into child layers</span>
+            </li>
+            <li class="rl-onb-check-item" data-key="usedUp">
+              <span class="rl-onb-check-circle">${checkIcon}</span>
+              <span class="rl-onb-check-label">Press <kbd>↑</kbd> to select the parent layer</span>
+            </li>
+            <li class="rl-onb-check-item" data-key="exited">
+              <span class="rl-onb-check-circle">${checkIcon}</span>
+              <span class="rl-onb-check-label">Hit <kbd>Esc</kbd> to exit Redline</span>
+            </li>
+          </ul>
         `;
+      }
 
       case 3:
         return `

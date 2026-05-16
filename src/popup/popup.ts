@@ -200,10 +200,17 @@ document.getElementById('open-shortcuts')?.addEventListener('click', (e) => {
  * branch is dead code and the entire dev section — including DOM lookups,
  * listeners, and storage writes — is dropped from the shipped bundle.
  */
-const ONBOARDING_STORAGE_KEY = 'redline-onboarding-step';
-const FAB_COLLAPSED_KEY = 'redline-floating-button-collapsed';
-
 if (import.meta.env.MODE === 'development') {
+  const ONBOARDING_STORAGE_KEY = 'redline-onboarding-step';
+  const ONBOARDING_STEP2_PROGRESS_KEY = 'redline-onboarding-step2-progress';
+  const FAB_COLLAPSED_KEY = 'redline-floating-button-collapsed';
+  const EMPTY_STEP2_PROGRESS = {
+    hovered: false,
+    usedUp: false,
+    usedDown: false,
+    exited: false,
+  };
+
   const devSection = document.getElementById('dev-section');
   devSection?.classList.add('dev-visible');
 
@@ -211,11 +218,13 @@ if (import.meta.env.MODE === 'development') {
     .getElementById('dev-start-onboarding')
     ?.addEventListener('click', async () => {
       // Make sure the FAB is showing and expanded across all tabs so the
-      // tooltip has something to anchor to.
+      // tooltip has something to anchor to. Reset step-2 progress too so a
+      // re-run of the tour starts with an empty checklist.
       await chrome.storage.local.set({
         [FAB_HIDDEN_KEY]: false,
         [FAB_COLLAPSED_KEY]: false,
         [ONBOARDING_STORAGE_KEY]: 1,
+        [ONBOARDING_STEP2_PROGRESS_KEY]: EMPTY_STEP2_PROGRESS,
       });
       window.close();
     });
@@ -223,7 +232,10 @@ if (import.meta.env.MODE === 'development') {
   document
     .getElementById('dev-clear-onboarding')
     ?.addEventListener('click', async () => {
-      await chrome.storage.local.set({ [ONBOARDING_STORAGE_KEY]: 0 });
+      await chrome.storage.local.set({
+        [ONBOARDING_STORAGE_KEY]: 0,
+        [ONBOARDING_STEP2_PROGRESS_KEY]: EMPTY_STEP2_PROGRESS,
+      });
       window.close();
     });
 }

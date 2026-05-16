@@ -8,7 +8,10 @@ import { FloatingButton } from './FloatingButton';
 import {
   OnboardingTooltip,
   ONBOARDING_STORAGE_KEY,
+  ONBOARDING_STEP2_PROGRESS_KEY,
+  EMPTY_STEP2_PROGRESS,
   type OnboardingStep,
+  type Step2Progress,
 } from './OnboardingTooltip';
 import type { Message } from '../shared/types';
 
@@ -72,9 +75,22 @@ async function restoreActiveState(): Promise<void> {
   }
 }
 
-// Initialize inspector with callback for when it deactivates itself (e.g., via Escape)
+// Onboarding overlay (anchored above the FAB). Always instantiate so it can
+// react to chrome.storage changes, but only renders DOM while step > 0.
+// Declared before the inspector so the inspector callbacks can reference it.
+const onboarding = new OnboardingTooltip({
+  onOpenShortcuts: () => {
+    chrome.runtime.sendMessage({ type: 'OPEN_SHORTCUTS_PAGE' });
+  },
+});
+
+// Initialize inspector. Onboarding hooks observe in-flight inspection so the
+// step-2 checklist auto-checks as the user goes.
 const inspector = new ElementInspector({
   onDeactivate: () => syncButtonStates(),
+  onHover: () => onboarding.notifyHover(),
+  onArrowKey: (dir) => onboarding.notifyArrow(dir),
+  onEscape: () => onboarding.notifyEscape(),
 });
 
 // Initialize floating button with redline mode toggle
@@ -100,14 +116,6 @@ floatingButton = new FloatingButton({
   },
 });
 
-// Onboarding overlay (anchored above the FAB). Always instantiate so it can
-// react to chrome.storage changes, but only renders DOM while step > 0.
-const onboarding = new OnboardingTooltip({
-  onOpenShortcuts: () => {
-    chrome.runtime.sendMessage({ type: 'OPEN_SHORTCUTS_PAGE' });
-  },
-});
-
 // Mount floating button — visibility is user-controlled via popup toggle
 const FAB_HIDDEN_KEY = 'redline-floating-button-hidden';
 const FAB_COLLAPSED_KEY = 'redline-floating-button-collapsed';
@@ -115,11 +123,36 @@ const FAB_COLLAPSED_KEY = 'redline-floating-button-collapsed';
 floatingButton.mount();
 
 // Hydrate onboarding state from storage on every page load.
-void chrome.storage.local.get({ [ONBOARDING_STORAGE_KEY]: 0 }).then((result) => {
-  const raw = result[ONBOARDING_STORAGE_KEY];
-  const step = (typeof raw === 'number' && raw >= 0 && raw <= 3 ? raw : 0) as OnboardingStep;
-  onboarding.applyStep(step);
-});
+void chrome.storage.local
+  .get({
+    [ONBOARDING_STORAGE_KEY]: 0,
+    [ONBOARDING_STEP2_PROGRESS_KEY]: EMPTY_STEP2_PROGRESS,
+  })
+  .then((result) => {
+    const rawStep = result[ONBOARDING_STORAGE_KEY];
+    const step = (typeof rawStep === 'number' && rawStep >= 0 && rawStep <= 3
+      ? rawStep
+      : 0) as OnboardingStep;
+
+    const rawProgress = result[ONBOARDING_STEP2_PROGRESS_KEY];
+    const progress = normalizeStep2Progress(rawProgress);
+
+    // Apply progress first so when applyStep(2) renders the checklist it
+    // already sees the correct hydration state.
+    onboarding.applyStep2Progress(progress);
+    onboarding.applyStep(step);
+  });
+
+function normalizeStep2Progress(raw: unknown): Step2Progress {
+  if (!raw || typeof raw !== 'object') return { ...EMPTY_STEP2_PROGRESS };
+  const r = raw as Partial<Step2Progress>;
+  return {
+    hovered: r.hovered === true,
+    usedUp: r.usedUp === true,
+    usedDown: r.usedDown === true,
+    exited: r.exited === true,
+  };
+}
 
 void chrome.storage.local.get({ [FAB_HIDDEN_KEY]: false }).then((result) => {
   const hidden = result[FAB_HIDDEN_KEY] === true;
@@ -170,6 +203,13 @@ chrome.storage.onChanged.addListener((changes, area) => {
     const raw = changes[ONBOARDING_STORAGE_KEY].newValue;
     const step = (typeof raw === 'number' && raw >= 0 && raw <= 3 ? raw : 0) as OnboardingStep;
     onboarding.applyStep(step);
+  }
+
+  if (changes[ONBOARDING_STEP2_PROGRESS_KEY]) {
+    const progress = normalizeStep2Progress(
+      changes[ONBOARDING_STEP2_PROGRESS_KEY].newValue,
+    );
+    onboarding.applyStep2Progress(progress);
   }
 
   // The FAB normally only loads its collapse state at mount, so external

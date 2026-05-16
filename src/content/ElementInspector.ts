@@ -5,6 +5,16 @@ import { AlignmentGuides } from './AlignmentGuides';
 
 export interface ElementInspectorCallbacks {
   onDeactivate?: () => void;
+  /** Fires whenever a new element is highlighted via mousemove. */
+  onHover?: (element: Element) => void;
+  /** Fires whenever an arrow key is consumed by the inspector. */
+  onArrowKey?: (direction: 'up' | 'down' | 'left' | 'right') => void;
+  /**
+   * Fires when Escape was the trigger for deactivation (vs FAB click,
+   * popup, or programmatic). Distinct from onDeactivate so onboarding can
+   * confirm the user actually used the keyboard exit.
+   */
+  onEscape?: () => void;
 }
 
 /**
@@ -117,7 +127,8 @@ export class ElementInspector {
     // Moving the cursor onto a different element resets any child-outline
     // state from a previous ArrowDown press — otherwise stale outlines
     // would persist over an unrelated element.
-    if (element !== this.currentElement) {
+    const isNewHover = element !== this.currentElement;
+    if (isNewHover) {
       this.resetChildrenDepth();
     }
     this.currentElement = element;
@@ -125,6 +136,8 @@ export class ElementInspector {
     this.alignmentGuides.showGuides(element);
 
     this.syncHighlightOverlay(element);
+
+    if (isNewHover) this.callbacks.onHover?.(element);
   }
 
   private syncHighlightOverlay(element: Element): void {
@@ -152,6 +165,7 @@ export class ElementInspector {
 
     switch (e.key) {
       case 'Escape':
+        this.callbacks.onEscape?.();
         this.deactivate();
         e.preventDefault();
         break;
@@ -161,6 +175,7 @@ export class ElementInspector {
         this.resetChildrenDepth();
         this.layerNavigator.navigateUp();
         this.applyCurrentNavigatorElement();
+        this.callbacks.onArrowKey?.('up');
         break;
 
       case 'ArrowDown':
@@ -191,6 +206,7 @@ export class ElementInspector {
           this.childrenDepth -= 1;
         }
         this.highlightOverlay.highlightChildren(frontier);
+        this.callbacks.onArrowKey?.('down');
         break;
 
       case 'ArrowRight':
@@ -198,6 +214,7 @@ export class ElementInspector {
         this.resetChildrenDepth();
         this.layerNavigator.navigateNext();
         this.applyCurrentNavigatorElement();
+        this.callbacks.onArrowKey?.('right');
         break;
 
       case 'ArrowLeft':
@@ -205,6 +222,7 @@ export class ElementInspector {
         this.resetChildrenDepth();
         this.layerNavigator.navigatePrevious();
         this.applyCurrentNavigatorElement();
+        this.callbacks.onArrowKey?.('left');
         break;
 
       default:

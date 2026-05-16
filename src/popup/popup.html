@@ -21,7 +21,9 @@
       --text-faint: #6a6a70;
       --primary: #e63946;
       --primary-hover: #d62839;
-      --success: #2a9d8f;
+      /* Active inspector state — a deeper red to stay on-brand instead of
+         the previous teal accent. */
+      --active: #a8202b;
     }
 
     html,
@@ -82,7 +84,7 @@
     }
 
     .activate-btn.active {
-      background: var(--success);
+      background: var(--active);
     }
 
     .section-title {
