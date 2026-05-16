@@ -22,6 +22,12 @@ export class ElementInspector {
 
   private currentElement: Element | null = null;
 
+  // Tracks how many ArrowDown presses have stacked. Each press drills one
+  // DOM level deeper under `currentElement`, expanding each outlined node
+  // into its children where possible and leaving shallow branches pinned at
+  // their deepest node so uneven nesting stays visible together.
+  private childrenDepth = 0;
+
   private boundHandleMouseMove: (e: MouseEvent) => void;
   private boundHandleKeyDown: (e: KeyboardEvent) => void;
   private boundHandleScroll: () => void;
@@ -108,6 +114,12 @@ export class ElementInspector {
       return;
     }
 
+    // Moving the cursor onto a different element resets any child-outline
+    // state from a previous ArrowDown press — otherwise stale outlines
+    // would persist over an unrelated element.
+    if (element !== this.currentElement) {
+      this.resetChildrenDepth();
+    }
     this.currentElement = element;
 
     this.alignmentGuides.showGuides(element);
@@ -146,13 +158,52 @@ export class ElementInspector {
 
       case 'ArrowUp':
         e.preventDefault();
+        this.resetChildrenDepth();
         this.layerNavigator.navigateUp();
         this.applyCurrentNavigatorElement();
         break;
 
       case 'ArrowDown':
+        // Down = drill one step deeper in parallel across every outlined
+        // subtree; shallow branches stay highlighted at their leaf instead
+        // of disappearing when sibling branches go deeper.
         e.preventDefault();
-        this.layerNavigator.navigateDown();
+        if (!this.currentElement) break;
+        this.childrenDepth += 1;
+        const baseChildren = this.collectInspectableChildren(
+          this.currentElement,
+        );
+        if (baseChildren.length === 0) {
+          this.childrenDepth -= 1;
+          break;
+        }
+        let frontier = baseChildren;
+        let stuck = false;
+        for (let i = 1; i < this.childrenDepth; i++) {
+          const next = this.parallelDrillOneStep(frontier);
+          if (this.areSameFrontiers(frontier, next)) {
+            stuck = true;
+            break;
+          }
+          frontier = next;
+        }
+        if (stuck) {
+          this.childrenDepth -= 1;
+        }
+        this.highlightOverlay.highlightChildren(frontier);
+        break;
+
+      case 'ArrowRight':
+        e.preventDefault();
+        this.resetChildrenDepth();
+        this.layerNavigator.navigateNext();
+        this.applyCurrentNavigatorElement();
+        break;
+
+      case 'ArrowLeft':
+        e.preventDefault();
+        this.resetChildrenDepth();
+        this.layerNavigator.navigatePrevious();
         this.applyCurrentNavigatorElement();
         break;
 
@@ -175,5 +226,54 @@ export class ElementInspector {
       this.alignmentGuides.showGuides(element);
       this.syncHighlightOverlay(element);
     }
+  }
+
+  /**
+   * Clear stacked-Down state and remove all child outlines from the overlay.
+   */
+  private resetChildrenDepth(): void {
+    this.childrenDepth = 0;
+    this.highlightOverlay.clearChildrenHighlight();
+  }
+
+  /** Direct element children suitable for outline drill-down (same filters as before). */
+  private collectInspectableChildren(parent: Element): Element[] {
+    const out: Element[] = [];
+    for (const child of Array.from(parent.children)) {
+      if (
+        child.hasAttribute('data-redline-overlay') ||
+        child.hasAttribute('data-redline-panel') ||
+        child.hasAttribute('data-redline-ui') ||
+        child.hasAttribute('data-redline-badges')
+      ) {
+        continue;
+      }
+      const rect = child.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) continue;
+      out.push(child);
+    }
+    return out;
+  }
+
+  /**
+   * One parallel drill step: each node becomes its inspectable children,
+   * or stays put if it has none (leaf branch stays selected).
+   */
+  private parallelDrillOneStep(frontier: Element[]): Element[] {
+    const next: Element[] = [];
+    for (const node of frontier) {
+      const kids = this.collectInspectableChildren(node);
+      if (kids.length > 0) {
+        next.push(...kids);
+      } else {
+        next.push(node);
+      }
+    }
+    return next;
+  }
+
+  private areSameFrontiers(a: Element[], b: Element[]): boolean {
+    if (a.length !== b.length) return false;
+    return a.every((el, i) => el === b[i]);
   }
 }

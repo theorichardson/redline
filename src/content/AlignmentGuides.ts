@@ -4,15 +4,6 @@
  * Now supports interactive ruler lines for multi-element selection
  */
 
-import { getTooltipCSS } from './styles';
-
-interface AlignmentMatch {
-  element: Element;
-  type: 'top' | 'bottom' | 'left' | 'right' | 'centerX' | 'centerY';
-  coordinate: number;
-  distance: number;
-}
-
 export interface RulerLine {
   orientation: 'horizontal' | 'vertical';
   position: number;
@@ -44,7 +35,6 @@ export class AlignmentGuides {
   private readonly showElementHighlightFrame: boolean;
 
   private guideColor = '#e63946';
-  private readonly ALIGNMENT_THRESHOLD = 2; // pixels for alignment matching
   private readonly MAX_ELEMENTS = 100;
   private readonly LINE_CACHE_TTL = 120; // ms
   private lineElementsCache = new Map<string, { timestamp: number; elements: Element[] }>();
@@ -328,14 +318,11 @@ export class AlignmentGuides {
     const shouldShowRulers = !this.isHybridMode || this.isShiftPressed;
     
     if (shouldShowRulers) {
-      // Find nearby elements and their alignment matches (for distance labels)
-      const matches = this.findAlignmentMatches(element, rect);
-
-      // Draw ruler lines from all edges (now interactive with intersection-based selection)
+      // Draw ruler lines from all edges (interactive with intersection-based selection).
+      // Distance chips around the edges were intentionally removed — they clustered
+      // and overlapped making them hard to read, and ruler hover already gives the
+      // user an on-demand way to read distances precisely.
       this.drawRulerLines(rect);
-
-      // Draw distance labels
-      this.drawDistanceLabels(rect, matches);
     }
   }
 
@@ -598,60 +585,6 @@ export class AlignmentGuides {
     }
     return depth;
   }
-
-  /**
-   * Get all visible elements in viewport (excluding Redline UI)
-   */
-  private getAllVisibleElements(): Element[] {
-    const elements: Element[] = [];
-    const walker = document.createTreeWalker(
-      document.body,
-      NodeFilter.SHOW_ELEMENT,
-      {
-        acceptNode: (node) => {
-          const el = node as Element;
-          
-          // Skip Redline UI elements
-          if (
-            el.hasAttribute('data-redline-overlay') ||
-            el.hasAttribute('data-redline-panel') ||
-            el.hasAttribute('data-redline-guides') ||
-            el.hasAttribute('data-redline-ui') ||
-            el.hasAttribute('data-redline-badges') ||
-            el.tagName === 'HTML' ||
-            el.tagName === 'BODY' ||
-            el.tagName === 'SCRIPT' ||
-            el.tagName === 'STYLE'
-          ) {
-            return NodeFilter.FILTER_REJECT;
-          }
-
-          // Check if element is in viewport and has size
-          const rect = el.getBoundingClientRect();
-          const inViewport =
-            rect.top < window.innerHeight &&
-            rect.bottom > 0 &&
-            rect.left < window.innerWidth &&
-            rect.right > 0;
-
-          if (inViewport && rect.width > 0 && rect.height > 0) {
-            return NodeFilter.FILTER_ACCEPT;
-          }
-
-          return NodeFilter.FILTER_SKIP;
-        },
-      }
-    );
-
-    let currentNode = walker.nextNode();
-    while (currentNode && elements.length < this.MAX_ELEMENTS) {
-      elements.push(currentNode as Element);
-      currentNode = walker.nextNode();
-    }
-
-    return elements;
-  }
-
   private createInteractiveLine(
     orientation: 'horizontal' | 'vertical',
     position: number,
@@ -782,143 +715,4 @@ export class AlignmentGuides {
     this.labelsContainer.appendChild(highlight);
   }
 
-  private findAlignmentMatches(element: Element, rect: DOMRect): AlignmentMatch[] {
-    const matches: AlignmentMatch[] = [];
-    
-    // Get all visible elements (reuse getAllVisibleElements)
-    const allElements = this.getAllVisibleElements().filter(el => el !== element);
-    
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-
-    for (const el of allElements) {
-      const elRect = el.getBoundingClientRect();
-      const elCenterX = elRect.left + elRect.width / 2;
-      const elCenterY = elRect.top + elRect.height / 2;
-
-      // Check top edge alignment
-      if (Math.abs(rect.top - elRect.top) <= this.ALIGNMENT_THRESHOLD) {
-        matches.push({
-          element: el,
-          type: 'top',
-          coordinate: elRect.top,
-          distance: Math.abs(rect.left - elRect.left),
-        });
-      }
-
-      // Check bottom edge alignment
-      if (Math.abs(rect.bottom - elRect.bottom) <= this.ALIGNMENT_THRESHOLD) {
-        matches.push({
-          element: el,
-          type: 'bottom',
-          coordinate: elRect.bottom,
-          distance: Math.abs(rect.left - elRect.left),
-        });
-      }
-
-      // Check left edge alignment
-      if (Math.abs(rect.left - elRect.left) <= this.ALIGNMENT_THRESHOLD) {
-        matches.push({
-          element: el,
-          type: 'left',
-          coordinate: elRect.left,
-          distance: Math.abs(rect.top - elRect.top),
-        });
-      }
-
-      // Check right edge alignment
-      if (Math.abs(rect.right - elRect.right) <= this.ALIGNMENT_THRESHOLD) {
-        matches.push({
-          element: el,
-          type: 'right',
-          coordinate: elRect.right,
-          distance: Math.abs(rect.top - elRect.top),
-        });
-      }
-
-      // Check center X alignment
-      if (Math.abs(centerX - elCenterX) <= this.ALIGNMENT_THRESHOLD) {
-        matches.push({
-          element: el,
-          type: 'centerX',
-          coordinate: elCenterX,
-          distance: Math.abs(rect.top - elRect.top),
-        });
-      }
-
-      // Check center Y alignment
-      if (Math.abs(centerY - elCenterY) <= this.ALIGNMENT_THRESHOLD) {
-        matches.push({
-          element: el,
-          type: 'centerY',
-          coordinate: elCenterY,
-          distance: Math.abs(rect.left - elRect.left),
-        });
-      }
-    }
-
-    return matches;
-  }
-
-  private drawDistanceLabels(rect: DOMRect, matches: AlignmentMatch[]): void {
-    // Group matches by type to avoid overlapping labels
-    const labelsByType = new Map<string, AlignmentMatch>();
-
-    for (const match of matches) {
-      // Only show distance for the closest match of each type
-      const existing = labelsByType.get(match.type);
-      if (!existing || match.distance < existing.distance) {
-        labelsByType.set(match.type, match);
-      }
-    }
-
-    // Draw labels for each type
-    for (const [type, match] of labelsByType) {
-      if (match.distance < 5) continue; // Skip very close elements
-      
-      const matchRect = match.element.getBoundingClientRect();
-      let x = 0;
-      let y = 0;
-      const distance = Math.round(match.distance);
-
-      switch (type) {
-        case 'top':
-        case 'bottom':
-          // Show horizontal distance
-          x = (rect.left + matchRect.left) / 2;
-          y = match.coordinate - 15;
-          break;
-        case 'left':
-        case 'right':
-          // Show vertical distance
-          x = match.coordinate + 8;
-          y = (rect.top + matchRect.top) / 2;
-          break;
-        case 'centerX':
-          x = match.coordinate + 8;
-          y = (rect.top + matchRect.top) / 2;
-          break;
-        case 'centerY':
-          x = (rect.left + matchRect.left) / 2;
-          y = match.coordinate - 15;
-          break;
-      }
-
-      this.createLabel(`${distance}px`, x, y);
-    }
-  }
-
-  private createLabel(text: string, x: number, y: number): void {
-    // Create label with unified styling from shared styles
-    const label = document.createElement('div');
-    label.className = 'guide-label';
-    label.textContent = text;
-    label.style.cssText = `
-      position: fixed;
-      left: ${x}px;
-      top: ${y}px;
-      ${getTooltipCSS('small')}
-    `;
-    this.labelsContainer.appendChild(label);
-  }
 }

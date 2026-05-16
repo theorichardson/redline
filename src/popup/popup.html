@@ -15,18 +15,10 @@
 
     :root {
       --bg: #000000;
-      --surface: rgba(255, 255, 255, 0.04);
-      --surface-hover: rgba(255, 255, 255, 0.08);
-      --border: rgba(255, 255, 255, 0.1);
-      --border-strong: rgba(255, 255, 255, 0.15);
-      /* Solid base so fill is visible in the extension popup (low-alpha overlays read as black). */
-      --card-fill-base: #181818;
-      /* Uniform pale grey panel on black (flat, no gradient). */
-      --card-fill: color-mix(in srgb, var(--card-fill-base) 90%, rgb(255, 255, 255) 10%);
-      --card-border: rgba(255, 255, 255, 0.26);
+      --card-fill: rgba(255, 255, 255, 0.09);
       --text: #ffffff;
-      --text-muted: #a8a8ad;
-      --text-faint: #7a7a80;
+      --text-muted: #8a8a8f;
+      --text-faint: #6a6a70;
       --primary: #e63946;
       --primary-hover: #d62839;
       --success: #2a9d8f;
@@ -34,8 +26,7 @@
 
     html,
     body {
-      width: 280px;
-      min-height: 520px;
+      width: 300px;
       background: #000000;
       background-color: #000000;
       color-scheme: dark;
@@ -53,48 +44,28 @@
 
     .popup-frame {
       background: var(--bg);
-      min-height: 520px;
-      border-radius: 18px;
-      overflow: hidden;
-      box-shadow:
-        inset 0 0 0 1px var(--border),
-        inset 0 0 0 2px rgba(255, 255, 255, 0.02);
-    }
-
-    .header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 14px 16px 0;
-      border-bottom: 1px solid var(--border);
+      padding: 18px 18px 16px;
     }
 
     .logo {
-      font-size: 14px;
-      font-weight: 600;
-      letter-spacing: -0.2px;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
       color: var(--text);
-    }
-
-    .content {
-      padding: 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
+      margin-bottom: 16px;
     }
 
     .activate-btn {
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
       width: 100%;
-      padding: 11px 14px;
+      padding: 13px 14px;
       background: var(--primary);
       border: none;
-      border-radius: 10px;
+      border-radius: 12px;
       color: #fff;
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 500;
       font-family: inherit;
       cursor: pointer;
@@ -114,30 +85,17 @@
       background: var(--success);
     }
 
-    .activate-btn .dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: #fff;
-      opacity: 0.9;
-    }
-
-    .activate-btn svg {
-      flex-shrink: 0;
-    }
-
     .section-title {
-      font-size: 11px;
-      font-weight: 500;
+      font-size: 12px;
+      font-weight: 400;
       color: var(--text-muted);
-      padding: 0 4px;
-      margin-top: 4px;
+      padding: 0 2px;
+      margin: 18px 0 8px;
     }
 
     .card {
       background: var(--card-fill);
-      border: 1px solid var(--card-border);
-      border-radius: 10px;
+      border-radius: 14px;
       overflow: hidden;
     }
 
@@ -146,29 +104,20 @@
       align-items: center;
       justify-content: space-between;
       gap: 10px;
-      padding: 9px 12px;
-      font-size: 12px;
-    }
-
-    .row + .row {
-      border-top: 1px solid var(--card-border);
+      padding: 12px 14px;
+      font-size: 13px;
     }
 
     .row-label {
       color: var(--text);
+      font-weight: 500;
     }
 
     .row-value {
-      display: flex;
-      align-items: center;
-      gap: 4px;
       color: var(--text);
-    }
-
-    .row-value .sep {
-      color: var(--text-faint);
-      font-size: 10px;
-      margin: 0 2px;
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
     }
 
     .row-text {
@@ -179,7 +128,8 @@
     }
 
     .row-sublabel {
-      font-size: 11px;
+      font-size: 12px;
+      font-weight: 400;
       color: var(--text-muted);
       line-height: 1.35;
     }
@@ -187,26 +137,20 @@
     .row-toggle {
       cursor: pointer;
       user-select: none;
-      transition: background 0.12s ease;
-    }
-
-    .row-toggle:hover {
-      background: var(--surface-hover);
     }
 
     .row-toggle:focus,
     .row-toggle:focus-visible {
       outline: none;
-      background: var(--surface-hover);
     }
 
     .toggle-switch {
       position: relative;
       flex-shrink: 0;
-      width: 32px;
-      height: 18px;
-      background: rgba(255, 255, 255, 0.12);
-      border-radius: 10px;
+      width: 36px;
+      height: 20px;
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 999px;
       transition: background 0.18s ease;
     }
 
@@ -215,8 +159,8 @@
       position: absolute;
       top: 2px;
       left: 2px;
-      width: 14px;
-      height: 14px;
+      width: 16px;
+      height: 16px;
       background: #fff;
       border-radius: 50%;
       transition: transform 0.18s ease;
@@ -227,71 +171,59 @@
     }
 
     .toggle-switch.active::after {
-      transform: translateX(14px);
-    }
-
-    kbd {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 20px;
-      height: 20px;
-      padding: 0 5px;
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid var(--border-strong);
-      border-radius: 4px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 10px;
-      font-weight: 500;
-      color: var(--text);
-      line-height: 1;
+      transform: translateX(16px);
     }
 
     .hint {
-      font-size: 11.5px;
+      font-size: 12px;
       color: var(--text-muted);
       line-height: 1.5;
-      padding: 2px 4px 0;
+      padding: 14px 2px 0;
     }
 
-    .hint code {
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 10.5px;
-      color: var(--text);
-      background: var(--surface);
-      padding: 1px 5px;
-      border-radius: 3px;
-      border: 1px solid var(--border);
+    .link {
+      color: var(--primary);
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .link:hover {
+      text-decoration: underline;
+    }
+
+    .unset-link {
+      color: var(--primary);
+      text-decoration: none;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .unset-link:hover {
+      text-decoration: underline;
     }
 
     .footer {
-      margin: 0;
-      padding: 6px 4px 12px;
-      font-size: 11px;
+      margin: 14px 2px 0;
+      font-size: 12px;
       color: var(--text-muted);
       line-height: 1.5;
-      text-align: left;
     }
   </style>
 </head>
-<body style="background:#000;margin:0;width:280px;min-height:520px;">
+<body style="background:#000;margin:0;width:300px;">
   <div class="popup-frame">
-  <div class="header">
     <div class="logo">Redline</div>
-  </div>
 
-  <div class="content">
     <button class="activate-btn" id="activate-btn">
-      <span class="dot"></span>
-      <span id="activate-label">Activate Inspector</span>
+      <span id="activate-label">Activate</span>
     </button>
 
     <div class="section-title">Display</div>
     <div class="card">
       <div class="row row-toggle" id="tab-toggle-row" role="button" tabindex="0" aria-pressed="true">
         <div class="row-text">
-          <span class="row-label">Show Redline tab</span>
-          <span class="row-sublabel">Floating control at bottom of page</span>
+          <span class="row-label">Show tab</span>
+          <span class="row-sublabel">Quick access on all webpages</span>
         </div>
         <div class="toggle-switch" id="tab-toggle"></div>
       </div>
@@ -301,40 +233,35 @@
     <div class="card">
       <div class="row">
         <span class="row-label">Toggle inspector</span>
-        <div class="row-value">
-          <kbd>⌥</kbd><kbd>⇧</kbd><kbd>R</kbd>
-        </div>
+        <span class="row-value" id="shortcut-primary">⌥⇧R</span>
       </div>
       <div class="row">
-        <span class="row-label">Toggle inspector</span>
-        <div class="row-value">
-          <kbd>⌘</kbd><kbd>⇧</kbd><kbd>L</kbd>
-        </div>
+        <span class="row-label">Toggle inspector (alt)</span>
+        <span class="row-value" id="shortcut-alt">⌘⇧L</span>
       </div>
       <div class="row">
-        <span class="row-label">Navigate layers</span>
-        <div class="row-value">
-          <kbd>↑</kbd><kbd>↓</kbd>
-        </div>
+        <span class="row-label">Parent / child DIVs</span>
+        <span class="row-value">↑ ↓</span>
       </div>
       <div class="row">
-        <span class="row-label">Exit inspector</span>
-        <div class="row-value">
-          <kbd>Esc</kbd>
-        </div>
+        <span class="row-label">Sibling DIVs</span>
+        <span class="row-value">← →</span>
+      </div>
+      <div class="row">
+        <span class="row-label">Exit Redline mode</span>
+        <span class="row-value">Esc</span>
       </div>
     </div>
 
     <p class="hint">
-      Hover any element to see box-model tints, alignment guides, and typography. Shortcut not working? Reassign it in <code>chrome://extensions/shortcuts</code>.
+      Shortcut not working? <a href="#" id="open-shortcuts" class="link">Assign it in Chrome's shortcuts page.</a>
     </p>
 
     <p class="footer">
-      Layout inspection only — no tracking
+      Redline doesn't track any of your data.
     </p>
   </div>
-  </div>
 
-  <script src="popup.js" type="module"></script>
+  <script src="popup.js" defer></script>
 </body>
 </html>

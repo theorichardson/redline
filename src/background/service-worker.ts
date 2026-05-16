@@ -77,8 +77,22 @@ async function injectIntoAllTabs(): Promise<void> {
   );
 }
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener((details) => {
   void injectIntoAllTabs();
+
+  // On fresh install, help the user confirm/assign the keyboard shortcut.
+  // Chrome's `suggested_key` is a suggestion only — it is silently skipped
+  // when another extension already claims the combo or when Chrome's global
+  // suggested-shortcut cap is hit. Opening the shortcuts page surfaces that
+  // immediately instead of leaving the user wondering why the hotkey is dead.
+  if (details.reason === 'install') {
+    void chrome.commands.getAll().then((commands) => {
+      const anyBound = commands.some((c) => c.shortcut && c.shortcut.length > 0);
+      if (!anyBound) {
+        void chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
+      }
+    });
+  }
 });
 
 // Handle messages from content scripts

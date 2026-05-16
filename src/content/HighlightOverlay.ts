@@ -36,6 +36,11 @@ export class HighlightOverlay {
   private marginLabels: HTMLElement;
   private paddingLabels: HTMLElement;
 
+  // Container for outlines around every direct child of the current
+  // element. Populated by `highlightChildren()` (driven by ArrowDown in
+  // the inspector) and cleared on any other navigation or hover.
+  private childrenContainer: HTMLElement;
+
   private highlightColor = '#e63946';
   private showBoxModel = false;
   private isFrozen = false;
@@ -85,6 +90,10 @@ export class HighlightOverlay {
     this.paddingLabels = document.createElement('div');
     this.paddingLabels.className = 'box-labels padding-labels';
 
+    // Children outlines (filled by highlightChildren / cleared otherwise)
+    this.childrenContainer = document.createElement('div');
+    this.childrenContainer.className = 'children-outlines';
+
     // Create simple box overlay (for hover mode)
     this.box = document.createElement('div');
     this.box.className = 'redline-box';
@@ -104,6 +113,7 @@ export class HighlightOverlay {
     this.shadow.appendChild(this.contentOverlay);
     this.shadow.appendChild(this.marginLabels);
     this.shadow.appendChild(this.paddingLabels);
+    this.shadow.appendChild(this.childrenContainer);
     this.shadow.appendChild(this.box);
     this.shadow.appendChild(this.frozenIndicator);
   }
@@ -533,6 +543,66 @@ export class HighlightOverlay {
     this.paddingLabels.style.display = 'none';
   }
 
+  /**
+   * Parse a computed `row-gap` / `column-gap` value to a rounded pixel number.
+   * Returns 0 for "normal" or unparseable values (which is how the layout
+   * engine treats them anyway).
+   */
+  private parseGap(value: string): number {
+    if (!value || value === 'normal') return 0;
+    const n = parseFloat(value);
+    if (!isFinite(n) || n <= 0) return 0;
+    return Math.round(n);
+  }
+
+  private isFlexOrGridDisplay(display: string): boolean {
+    // Tolerant of cross-browser quirks (e.g. "-webkit-flex").
+    return /(^|\s)(inline-)?(flex|grid)(\s|$)/.test(display);
+  }
+
+  private formatGap(rowGap: number, colGap: number): string {
+    return rowGap === colGap ? `${rowGap}px` : `${rowGap}px / ${colGap}px`;
+  }
+
+  /**
+   * Build the gap tooltip entry for the hovered element. Looks at the
+   * element itself first (when it's a flex/grid container), then falls
+   * back to its parent (when the hovered element is an item inside a
+   * flex/grid container) so that hovering a card in a grid still tells
+   * the user the inter-item spacing rule.
+   */
+  private computeGapForTooltip(
+    element: Element,
+    computed: CSSStyleDeclaration,
+  ): { label: string; value: string } | null {
+    // Case 1: this element IS a flex/grid container with non-zero gap.
+    if (this.isFlexOrGridDisplay(computed.display)) {
+      const rowGap = this.parseGap(computed.rowGap);
+      const colGap = this.parseGap(computed.columnGap);
+      if (rowGap > 0 || colGap > 0) {
+        return { label: 'gap:', value: this.formatGap(rowGap, colGap) };
+      }
+    }
+
+    // Case 2: parent is a flex/grid container with non-zero gap.
+    const parent = element.parentElement;
+    if (parent) {
+      const parentComputed = window.getComputedStyle(parent);
+      if (this.isFlexOrGridDisplay(parentComputed.display)) {
+        const rowGap = this.parseGap(parentComputed.rowGap);
+        const colGap = this.parseGap(parentComputed.columnGap);
+        if (rowGap > 0 || colGap > 0) {
+          return {
+            label: 'parent gap:',
+            value: this.formatGap(rowGap, colGap),
+          };
+        }
+      }
+    }
+
+    return null;
+  }
+
   /** First font face from computed stack + truncation for single-line tooltip */
   private truncateFontFamilyForTooltip(family: string, maxChars = 44): string {
     const raw = family.split(',')[0]?.trim() ?? family;
@@ -574,13 +644,23 @@ export class HighlightOverlay {
       }
     }
 
+    // Gap (flex / grid). Shown for the hovered element when IT is the
+    // flex/grid container with a non-zero gap; OR for the hovered element
+    // when its PARENT is a flex/grid container with a non-zero gap (so
+    // that hovering an item in a grid still tells you the spacing rule
+    // between it and its siblings, labeled "parent gap" to avoid confusion).
+    const computed = window.getComputedStyle(element);
+    const gapInfo = this.computeGapForTooltip(element, computed);
+    if (gapInfo) {
+      parts.push(gapInfo);
+    }
+
     // Create tooltip content with formatted parts (same structure as default)
     const content = createTooltipContent(parts);
 
     // Calculate target rect including margin if showing box model
     let targetRect = rect;
     if (this.showBoxModel) {
-      const computed = window.getComputedStyle(element);
       const marginTop = parseFloat(computed.marginTop) || 0;
       const marginBottom = parseFloat(computed.marginBottom) || 0;
       const marginLeft = parseFloat(computed.marginLeft) || 0;
@@ -610,6 +690,43 @@ export class HighlightOverlay {
     this.frozenIndicator.classList.remove('visible');
     this.box.classList.remove('frozen');
     this.hideBoxModelOverlay();
+    this.clearChildrenHighlight();
+  }
+
+  /**
+   * Draw a thin outline around every passed-in element simultaneously.
+   * Used by ArrowDown so the user can see the layout of all direct
+   * children of the currently-selected container at once, rather than
+   * drilling into a single child.
+   */
+  highlightChildren(children: Element[]): void {
+    this.clearChildrenHighlight();
+    for (const child of children) {
+      const rect = child.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) continue;
+      const outline = document.createElement('div');
+      outline.className = 'child-outline';
+      outline.style.cssText = `
+        position: fixed;
+        top: ${rect.top}px;
+        left: ${rect.left}px;
+        width: ${rect.width}px;
+        height: ${rect.height}px;
+        border: 1.5px dashed ${this.highlightColor};
+        background: rgba(230, 57, 70, 0.08);
+        pointer-events: none;
+        box-sizing: border-box;
+        z-index: 2147483645;
+      `;
+      this.childrenContainer.appendChild(outline);
+    }
+  }
+
+  /**
+   * Remove all child outlines drawn by highlightChildren().
+   */
+  clearChildrenHighlight(): void {
+    this.childrenContainer.innerHTML = '';
   }
 
   setColor(color: string): void {
