@@ -1,6 +1,6 @@
 {
   "name": "redline",
-  "version": "1.0.9",
+  "version": "1.1.1",
   "description": "Browser extension for debugging web layout issues with DOM layer navigation and LLM-optimized context extraction",
   "type": "module",
   "scripts": {

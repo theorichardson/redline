@@ -77,21 +77,69 @@ async function injectIntoAllTabs(): Promise<void> {
   );
 }
 
+/**
+ * Decide whether this install/update should trigger the FTUX onboarding tour.
+ * The tour writes a single integer to chrome.storage.local; the content script
+ * picks it up on every open tab and renders the tooltip above the floating
+ * bar. Step 3 of the tour itself prompts the user to bind a keyboard shortcut,
+ * so we no longer auto-redirect to chrome://extensions/shortcuts on install.
+ */
+// Anyone on a version older than this should see the FTUX tour on next
+// upgrade. 1.1.1 is the first build where the install/upgrade hook
+// actually triggers it — 1.1.0 shipped the tooltip code but never wrote
+// the storage key, so 1.1.0 users still need to see it on bump to 1.1.1.
+const ONBOARDING_INTRODUCED_IN = '1.1.1';
+const ONBOARDING_STORAGE_KEY = 'redline-onboarding-step';
+const ONBOARDING_STEP2_PROGRESS_KEY = 'redline-onboarding-step2-progress';
+const FAB_HIDDEN_KEY = 'redline-floating-button-hidden';
+const FAB_COLLAPSED_KEY = 'redline-floating-button-collapsed';
+
+const EMPTY_STEP2_PROGRESS = {
+  hovered: false,
+  usedUp: false,
+  usedDown: false,
+  exited: false,
+};
+
+function compareVersions(a: string, b: string): number {
+  const pa = a.split('.').map((n) => parseInt(n, 10) || 0);
+  const pb = b.split('.').map((n) => parseInt(n, 10) || 0);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const da = pa[i] ?? 0;
+    const db = pb[i] ?? 0;
+    if (da !== db) return da - db;
+  }
+  return 0;
+}
+
+async function startOnboarding(): Promise<void> {
+  // Force the FAB visible+expanded so the tooltip has something to anchor
+  // to, and seed step 1 with a clean checklist for step 2.
+  await chrome.storage.local.set({
+    [ONBOARDING_STORAGE_KEY]: 1,
+    [ONBOARDING_STEP2_PROGRESS_KEY]: EMPTY_STEP2_PROGRESS,
+    [FAB_HIDDEN_KEY]: false,
+    [FAB_COLLAPSED_KEY]: false,
+  });
+}
+
 chrome.runtime.onInstalled.addListener((details) => {
   void injectIntoAllTabs();
 
-  // On fresh install, help the user confirm/assign the keyboard shortcut.
-  // Chrome's `suggested_key` is a suggestion only — it is silently skipped
-  // when another extension already claims the combo or when Chrome's global
-  // suggested-shortcut cap is hit. Opening the shortcuts page surfaces that
-  // immediately instead of leaving the user wondering why the hotkey is dead.
   if (details.reason === 'install') {
-    void chrome.commands.getAll().then((commands) => {
-      const anyBound = commands.some((c) => c.shortcut && c.shortcut.length > 0);
-      if (!anyBound) {
-        void chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
-      }
-    });
+    void startOnboarding();
+    return;
+  }
+
+  // Upgrades: run the tour once for users coming from a version that
+  // predates onboarding. compareVersions returns < 0 when previous < cutoff.
+  if (
+    details.reason === 'update' &&
+    details.previousVersion &&
+    compareVersions(details.previousVersion, ONBOARDING_INTRODUCED_IN) < 0
+  ) {
+    void startOnboarding();
   }
 });
 
