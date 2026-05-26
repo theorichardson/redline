@@ -1,4 +1,5 @@
 import { Tooltip, createTooltipContent } from './Tooltip';
+import { formatElementDisplayName } from './elementDisplayName';
 import type { TypographyStyles } from '../shared/types';
 
 export interface HighlightTooltipOpts {
@@ -615,21 +616,10 @@ export class HighlightOverlay {
   }
 
   private updateTooltip(element: Element, rect: DOMRect, tooltipOpts?: HighlightTooltipOpts): void {
-    const tag = element.tagName.toLowerCase();
-    const id = element.id ? `#${element.id}` : '';
-    const classes = Array.from(element.classList)
-      .slice(0, 3)
-      .map((c) => `.${c}`)
-      .join('');
+    const elementName = formatElementDisplayName(element);
 
     const width = Math.round(rect.width);
     const height = Math.round(rect.height);
-
-    // Build element name (tag + id + classes)
-    let elementName = `<${tag}>`;
-    if (id) elementName += id;
-    if (classes) elementName += classes;
-
     const parts: Array<{ label?: string; value: string }> = [
       { value: elementName },
       { value: `${width} × ${height}` },

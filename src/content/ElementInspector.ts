@@ -2,6 +2,8 @@ import { HighlightOverlay } from './HighlightOverlay';
 import { LayerNavigator } from './LayerNavigator';
 import { StyleAnalyzer } from './StyleAnalyzer';
 import { AlignmentGuides } from './AlignmentGuides';
+import { Tooltip } from './Tooltip';
+import { formatElementDisplayName } from './elementDisplayName';
 
 export interface ElementInspectorCallbacks {
   onDeactivate?: () => void;
@@ -29,6 +31,7 @@ export class ElementInspector {
   private highlightOverlay: HighlightOverlay;
   private styleAnalyzer: StyleAnalyzer;
   private layerNavigator: LayerNavigator;
+  private copyFeedbackTooltip: Tooltip;
 
   private currentElement: Element | null = null;
 
@@ -39,6 +42,7 @@ export class ElementInspector {
   private childrenDepth = 0;
 
   private boundHandleMouseMove: (e: MouseEvent) => void;
+  private boundHandleClick: (e: MouseEvent) => void;
   private boundHandleKeyDown: (e: KeyboardEvent) => void;
   private boundHandleScroll: () => void;
 
@@ -47,12 +51,14 @@ export class ElementInspector {
     this.layerNavigator = new LayerNavigator();
     this.styleAnalyzer = new StyleAnalyzer();
     this.highlightOverlay = new HighlightOverlay();
+    this.copyFeedbackTooltip = new Tooltip('redline-copy-feedback-tooltip');
     this.alignmentGuides = new AlignmentGuides({}, {
       enableRulerInteraction: false,
       showElementHighlightFrame: false,
     });
 
     this.boundHandleMouseMove = this.handleMouseMove.bind(this);
+    this.boundHandleClick = this.handleClick.bind(this);
     this.boundHandleKeyDown = this.handleKeyDown.bind(this);
     this.boundHandleScroll = this.handleScroll.bind(this);
   }
@@ -65,6 +71,7 @@ export class ElementInspector {
     this.highlightOverlay.mount();
 
     document.addEventListener('mousemove', this.boundHandleMouseMove, true);
+    document.addEventListener('click', this.boundHandleClick, true);
     document.addEventListener('keydown', this.boundHandleKeyDown, true);
     window.addEventListener('scroll', this.boundHandleScroll, true);
 
@@ -77,11 +84,13 @@ export class ElementInspector {
     this.isActive = false;
 
     document.removeEventListener('mousemove', this.boundHandleMouseMove, true);
+    document.removeEventListener('click', this.boundHandleClick, true);
     document.removeEventListener('keydown', this.boundHandleKeyDown, true);
     window.removeEventListener('scroll', this.boundHandleScroll, true);
 
     this.highlightOverlay.hide();
     this.highlightOverlay.unmount();
+    this.copyFeedbackTooltip.hide();
 
     this.alignmentGuides.hide();
     this.alignmentGuides.unmount();
@@ -138,6 +147,63 @@ export class ElementInspector {
     this.syncHighlightOverlay(element);
 
     if (isNewHover) this.callbacks.onHover?.(element);
+  }
+
+  private handleClick(e: MouseEvent): void {
+    if (!this.isActive) return;
+
+    const target = e.target as Element;
+    if (
+      target.closest('[data-redline-guides]') ||
+      target.closest('[data-redline-overlay]') ||
+      target.closest('[data-redline-ui]')
+    ) {
+      return;
+    }
+
+    this.layerNavigator.updateAtPoint(e.clientX, e.clientY);
+    const element = this.layerNavigator.getCurrentElement();
+    if (!element) return;
+
+    const name = formatElementDisplayName(element);
+    void this.copyTextToClipboard(name).then((copied) => {
+      if (!copied || !this.isActive) return;
+
+      this.copyFeedbackTooltip.showTemporary(
+        {
+          content: `Copied: ${name}`,
+          x: e.clientX,
+          y: e.clientY,
+          size: 'small',
+          offset: { x: 12, y: 12 },
+        },
+        1500,
+      );
+    });
+
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  private async copyTextToClipboard(text: string): Promise<boolean> {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        return ok;
+      } catch {
+        return false;
+      }
+    }
   }
 
   private syncHighlightOverlay(element: Element): void {

@@ -9,11 +9,12 @@ export class Tooltip {
   private container: HTMLElement;
   private shadow: ShadowRoot;
   private tooltip: HTMLElement;
+  private hideTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  constructor() {
+  constructor(containerId = 'redline-tooltip-container') {
     // Create container with shadow DOM
     this.container = document.createElement('div');
-    this.container.id = 'redline-tooltip-container';
+    this.container.id = containerId;
     this.shadow = this.container.attachShadow({ mode: 'open' });
 
     // Create tooltip element
@@ -273,9 +274,39 @@ export class Tooltip {
   }
 
   /**
+   * Show tooltip briefly beside a point, then hide automatically.
+   */
+  showTemporary(
+    options: {
+      content: string | HTMLElement;
+      x: number;
+      y: number;
+      size?: 'small' | 'medium' | 'large';
+      variant?: 'dark' | 'light' | 'accent';
+      offset?: { x?: number; y?: number };
+    },
+    durationMs = 1500,
+  ): void {
+    if (this.hideTimeout) {
+      clearTimeout(this.hideTimeout);
+      this.hideTimeout = null;
+    }
+
+    this.show(options);
+    this.hideTimeout = setTimeout(() => {
+      this.hide();
+      this.hideTimeout = null;
+    }, durationMs);
+  }
+
+  /**
    * Hide tooltip
    */
   hide(): void {
+    if (this.hideTimeout) {
+      clearTimeout(this.hideTimeout);
+      this.hideTimeout = null;
+    }
     this.tooltip.classList.remove('visible');
   }
 
@@ -290,6 +321,10 @@ export class Tooltip {
    * Remove tooltip from DOM
    */
   destroy(): void {
+    if (this.hideTimeout) {
+      clearTimeout(this.hideTimeout);
+      this.hideTimeout = null;
+    }
     if (this.container.parentElement) {
       this.container.parentElement.removeChild(this.container);
     }
