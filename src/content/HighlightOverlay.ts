@@ -1,3 +1,4 @@
+import { formatBoxModelLabel } from './boxModelTokenLabel';
 import { Tooltip, createTooltipContent } from './Tooltip';
 import { formatElementDisplayName } from './elementDisplayName';
 import type { TypographyStyles } from '../shared/types';
@@ -50,6 +51,8 @@ export class HighlightOverlay {
   private readonly MARGIN_COLOR = 'rgba(255, 155, 120, 0.32)';
   private readonly BORDER_COLOR = 'rgba(255, 212, 120, 0.38)';
   private readonly PADDING_COLOR = 'rgba(120, 200, 140, 0.32)';
+  private readonly MARGIN_LABEL_BG = 'rgba(230, 100, 80, 0.95)';
+  private readonly PADDING_LABEL_BG = 'rgba(80, 160, 100, 0.95)';
 
   constructor() {
     // Create shadow DOM host for style isolation
@@ -157,6 +160,11 @@ export class HighlightOverlay {
 
       .box-labels {
         position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
         pointer-events: none;
         z-index: 2147483647;
         display: none;
@@ -167,19 +175,21 @@ export class HighlightOverlay {
         font-family: -apple-system, BlinkMacSystemFont, 'SF Mono', Monaco, monospace;
         font-size: 10px;
         font-weight: 600;
-        padding: 2px 5px;
+        padding: 2px 6px;
         border-radius: 3px;
         white-space: nowrap;
+        color: #fff;
+        transform: translate(-50%, -50%);
       }
 
+      .box-label--margin,
       .margin-labels .box-label {
-        background: rgba(230, 100, 80, 0.95);
-        color: #fff;
+        background: ${this.MARGIN_LABEL_BG};
       }
 
+      .box-label--padding,
       .padding-labels .box-label {
-        background: rgba(80, 160, 100, 0.95);
-        color: #fff;
+        background: ${this.PADDING_LABEL_BG};
       }
 
       @keyframes redline-shake {
@@ -409,13 +419,13 @@ export class HighlightOverlay {
     this.contentOverlay.style.display = 'none';
 
     // Update labels
-    this.updateBoxModelLabels(rect, box);
+    this.updateBoxModelLabels(element, rect, box);
   }
 
   /**
    * Update the box model labels showing values
    */
-  private updateBoxModelLabels(rect: DOMRect, box: BoxModelValues): void {
+  private updateBoxModelLabels(element: Element, rect: DOMRect, box: BoxModelValues): void {
     // Margin labels - positioned outside the element
     const hasMargin =
       box.margin.top > 0 || box.margin.right > 0 || box.margin.bottom > 0 || box.margin.left > 0;
@@ -432,34 +442,54 @@ export class HighlightOverlay {
 
       // Top margin label
       if (box.margin.top > 0) {
-        const label = this.createLabel(Math.round(box.margin.top));
-        label.style.top = `${marginTop + box.margin.top / 2 - 8}px`;
-        label.style.left = `${marginLeft + marginWidth / 2 - 12}px`;
-        this.marginLabels.appendChild(label);
+        this.appendBoxModelLabel(
+          this.marginLabels,
+          element,
+          'margin',
+          'top',
+          box.margin.top,
+          marginLeft + marginWidth / 2,
+          marginTop + box.margin.top / 2,
+        );
       }
 
       // Bottom margin label
       if (box.margin.bottom > 0) {
-        const label = this.createLabel(Math.round(box.margin.bottom));
-        label.style.top = `${rect.bottom + box.margin.bottom / 2 - 8}px`;
-        label.style.left = `${marginLeft + marginWidth / 2 - 12}px`;
-        this.marginLabels.appendChild(label);
+        this.appendBoxModelLabel(
+          this.marginLabels,
+          element,
+          'margin',
+          'bottom',
+          box.margin.bottom,
+          marginLeft + marginWidth / 2,
+          rect.bottom + box.margin.bottom / 2,
+        );
       }
 
       // Left margin label
       if (box.margin.left > 0) {
-        const label = this.createLabel(Math.round(box.margin.left));
-        label.style.top = `${marginTop + marginHeight / 2 - 8}px`;
-        label.style.left = `${marginLeft + box.margin.left / 2 - 12}px`;
-        this.marginLabels.appendChild(label);
+        this.appendBoxModelLabel(
+          this.marginLabels,
+          element,
+          'margin',
+          'left',
+          box.margin.left,
+          marginLeft + box.margin.left / 2,
+          marginTop + marginHeight / 2,
+        );
       }
 
       // Right margin label
       if (box.margin.right > 0) {
-        const label = this.createLabel(Math.round(box.margin.right));
-        label.style.top = `${marginTop + marginHeight / 2 - 8}px`;
-        label.style.left = `${rect.right + box.margin.right / 2 - 12}px`;
-        this.marginLabels.appendChild(label);
+        this.appendBoxModelLabel(
+          this.marginLabels,
+          element,
+          'margin',
+          'right',
+          box.margin.right,
+          rect.right + box.margin.right / 2,
+          marginTop + marginHeight / 2,
+        );
       }
     } else {
       this.marginLabels.style.display = 'none';
@@ -483,36 +513,56 @@ export class HighlightOverlay {
 
       // Top padding label
       if (box.padding.top > 0) {
-        const label = this.createLabel(Math.round(box.padding.top), true);
-        label.style.top = `${innerTop + box.padding.top / 2 - 8}px`;
-        label.style.left = `${innerLeft + innerWidth / 2 - 12}px`;
-        this.paddingLabels.appendChild(label);
+        this.appendBoxModelLabel(
+          this.paddingLabels,
+          element,
+          'padding',
+          'top',
+          box.padding.top,
+          innerLeft + innerWidth / 2,
+          innerTop + box.padding.top / 2,
+        );
       }
 
       // Bottom padding label
       if (box.padding.bottom > 0) {
-        const label = this.createLabel(Math.round(box.padding.bottom), true);
         const bottomEdge = innerTop + innerHeight;
-        label.style.top = `${bottomEdge - box.padding.bottom / 2 - 8}px`;
-        label.style.left = `${innerLeft + innerWidth / 2 - 12}px`;
-        this.paddingLabels.appendChild(label);
+        this.appendBoxModelLabel(
+          this.paddingLabels,
+          element,
+          'padding',
+          'bottom',
+          box.padding.bottom,
+          innerLeft + innerWidth / 2,
+          bottomEdge - box.padding.bottom / 2,
+        );
       }
 
       // Left padding label
       if (box.padding.left > 0) {
-        const label = this.createLabel(Math.round(box.padding.left), true);
-        label.style.top = `${innerTop + innerHeight / 2 - 8}px`;
-        label.style.left = `${innerLeft + box.padding.left / 2 - 12}px`;
-        this.paddingLabels.appendChild(label);
+        this.appendBoxModelLabel(
+          this.paddingLabels,
+          element,
+          'padding',
+          'left',
+          box.padding.left,
+          innerLeft + box.padding.left / 2,
+          innerTop + innerHeight / 2,
+        );
       }
 
       // Right padding label
       if (box.padding.right > 0) {
-        const label = this.createLabel(Math.round(box.padding.right), true);
         const rightEdge = innerLeft + innerWidth;
-        label.style.top = `${innerTop + innerHeight / 2 - 8}px`;
-        label.style.left = `${rightEdge - box.padding.right / 2 - 12}px`;
-        this.paddingLabels.appendChild(label);
+        this.appendBoxModelLabel(
+          this.paddingLabels,
+          element,
+          'padding',
+          'right',
+          box.padding.right,
+          rightEdge - box.padding.right / 2,
+          innerTop + innerHeight / 2,
+        );
       }
     } else {
       this.paddingLabels.style.display = 'none';
@@ -522,11 +572,76 @@ export class HighlightOverlay {
   /**
    * Create a label element for box model values
    */
-  private createLabel(value: number, _isPadding = false): HTMLElement {
+  private createBoxModelLabel(
+    element: Element,
+    boxType: 'margin' | 'padding',
+    side: 'top' | 'right' | 'bottom' | 'left',
+    pxValue: number,
+  ): HTMLElement {
+    const isPadding = boxType === 'padding';
     const label = document.createElement('span');
-    label.className = 'box-label';
-    label.textContent = `${value}`;
+    label.className = isPadding ? 'box-label box-label--padding' : 'box-label box-label--margin';
+    label.style.background = isPadding ? this.PADDING_LABEL_BG : this.MARGIN_LABEL_BG;
+    label.style.color = '#fff';
+    label.textContent = formatBoxModelLabel(element, boxType, side, pxValue);
     return label;
+  }
+
+  private appendBoxModelLabel(
+    container: HTMLElement,
+    element: Element,
+    boxType: 'margin' | 'padding',
+    side: 'top' | 'right' | 'bottom' | 'left',
+    pxValue: number,
+    x: number,
+    y: number,
+  ): void {
+    const label = this.createBoxModelLabel(element, boxType, side, pxValue);
+    label.style.left = `${x}px`;
+    label.style.top = `${y}px`;
+    container.appendChild(label);
+    this.clampBoxModelLabelToViewport(label);
+  }
+
+  /** Nudge centered box-model labels so they stay fully inside the viewport. */
+  private clampBoxModelLabelToViewport(label: HTMLElement, margin = 6): void {
+    let offsetX = 0;
+    let offsetY = 0;
+
+    for (let pass = 0; pass < 2; pass++) {
+      label.style.transform =
+        offsetX === 0 && offsetY === 0
+          ? 'translate(-50%, -50%)'
+          : `translate(calc(-50% + ${offsetX}px), calc(-50% + ${offsetY}px))`;
+
+      const rect = label.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      let dx = 0;
+      let dy = 0;
+
+      if (rect.right > viewportWidth - margin) {
+        dx -= rect.right - (viewportWidth - margin);
+      }
+      if (rect.left < margin) {
+        dx += margin - rect.left;
+      }
+      if (rect.bottom > viewportHeight - margin) {
+        dy -= rect.bottom - (viewportHeight - margin);
+      }
+      if (rect.top < margin) {
+        dy += margin - rect.top;
+      }
+
+      if (dx === 0 && dy === 0) break;
+      offsetX += dx;
+      offsetY += dy;
+    }
+
+    if (offsetX !== 0 || offsetY !== 0) {
+      label.style.transform = `translate(calc(-50% + ${offsetX}px), calc(-50% + ${offsetY}px))`;
+    }
   }
 
   /**
