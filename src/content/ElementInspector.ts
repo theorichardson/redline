@@ -9,6 +9,8 @@ export interface ElementInspectorCallbacks {
   onDeactivate?: () => void;
   /** Fires whenever a new element is highlighted via mousemove. */
   onHover?: (element: Element) => void;
+  /** Fires when the user clicks an element and its name is copied. */
+  onCopy?: () => void;
   /** Fires whenever an arrow key is consumed by the inspector. */
   onArrowKey?: (direction: 'up' | 'down' | 'left' | 'right') => void;
   /**
@@ -168,6 +170,8 @@ export class ElementInspector {
     const name = formatElementDisplayName(element);
     void this.copyTextToClipboard(name).then((copied) => {
       if (!copied || !this.isActive) return;
+
+      this.callbacks.onCopy?.();
 
       this.copyFeedbackTooltip.showTemporary(
         {

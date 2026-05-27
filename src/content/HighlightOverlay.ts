@@ -1,4 +1,13 @@
 import { extractDesignTokenName, formatBoxModelLabel } from './boxModelTokenLabel';
+import {
+  buildBoxModelLabelSpecs,
+  computeBoxModelLabelAnchor,
+  computeGapLabelAnchor,
+  collectRedlineUiObstacleRects,
+  mountAndLayoutOverlayLabels,
+  type BoxModelGeometry,
+  type LabelMountBatch,
+} from './boxModelLabelPlacement';
 import { Tooltip, createTooltipContent } from './Tooltip';
 import { formatElementDisplayName } from './elementDisplayName';
 import type { TypographyStyles } from '../shared/types';
@@ -207,7 +216,6 @@ export class HighlightOverlay {
         border-radius: 3px;
         white-space: nowrap;
         color: #fff;
-        transform: translate(-50%, -50%);
       }
 
       .box-label--margin,
@@ -313,6 +321,7 @@ export class HighlightOverlay {
   highlight(element: Element, tooltipOpts?: HighlightTooltipOpts): void {
     this.showBoxModel = true; // Always show box model
     const rect = element.getBoundingClientRect();
+    const box = this.getBoxModelValues(element);
 
     // Show red outline around the element
     this.box.style.top = `${rect.top}px`;
@@ -321,11 +330,18 @@ export class HighlightOverlay {
     this.box.style.height = `${rect.height}px`;
     this.box.style.display = 'block';
 
-    // Show box model visualization (margin/padding)
-    this.showBoxModelOverlay(element, rect);
+    // Box model fills and gap bands (labels laid out after tooltip position is known)
+    this.showBoxModelOverlay(element, rect, box);
 
-    // Update tooltip
+    // Black name tooltip — position first so padding/margin labels can avoid it
     this.updateTooltip(element, rect, tooltipOpts);
+
+    this.renderOverlayLabels(
+      element,
+      rect,
+      box,
+      collectRedlineUiObstacleRects([this.tooltip.getRect()]),
+    );
   }
 
   /**
@@ -361,8 +377,7 @@ export class HighlightOverlay {
   /**
    * Show the box model visualization overlays (margin and padding as hollow frames)
    */
-  private showBoxModelOverlay(element: Element, rect: DOMRect): void {
-    const box = this.getBoxModelValues(element);
+  private showBoxModelOverlay(element: Element, rect: DOMRect, box: BoxModelValues): void {
 
     // Check if there's any margin to show
     const hasMargin =
@@ -475,157 +490,69 @@ export class HighlightOverlay {
 
     this.contentOverlay.style.display = 'none';
 
-    // Update labels
-    this.updateBoxModelLabels(element, rect, box);
-
     this.showGapOverlay(element);
   }
 
   /**
-   * Update the box model labels showing values
+   * Place margin/padding/gap labels outside their bands and resolve collisions together.
    */
-  private updateBoxModelLabels(element: Element, rect: DOMRect, box: BoxModelValues): void {
-    // Margin labels - positioned outside the element
-    const hasMargin =
-      box.margin.top > 0 || box.margin.right > 0 || box.margin.bottom > 0 || box.margin.left > 0;
+  private renderOverlayLabels(
+    element: Element,
+    rect: DOMRect,
+    box: BoxModelValues,
+    obstacles: DOMRect[],
+  ): void {
+    this.marginLabels.innerHTML = '';
+    this.paddingLabels.innerHTML = '';
+    this.gapLabels.innerHTML = '';
+    this.marginLabels.style.display = 'none';
+    this.paddingLabels.style.display = 'none';
+    this.gapLabels.style.display = 'none';
 
-    if (hasMargin) {
-      this.marginLabels.innerHTML = '';
-      this.marginLabels.style.display = 'block';
+    const geo: BoxModelGeometry = {
+      elementRect: rect,
+      margin: box.margin,
+      border: box.border,
+      padding: box.padding,
+    };
 
-      // Use the margin box as reference
-      const marginTop = rect.top - box.margin.top;
-      const marginLeft = rect.left - box.margin.left;
-      const marginWidth = rect.width + box.margin.left + box.margin.right;
-      const marginHeight = rect.height + box.margin.top + box.margin.bottom;
+    const targetRect = new DOMRect(
+      rect.left - box.margin.left,
+      rect.top - box.margin.top,
+      rect.width + box.margin.left + box.margin.right,
+      rect.height + box.margin.top + box.margin.bottom,
+    );
 
-      // Top margin label
-      if (box.margin.top > 0) {
-        this.appendBoxModelLabel(
-          this.marginLabels,
-          element,
-          'margin',
-          'top',
-          box.margin.top,
-          marginLeft + marginWidth / 2,
-          marginTop + box.margin.top / 2,
-        );
-      }
+    const batches: LabelMountBatch[] = [];
 
-      // Bottom margin label
-      if (box.margin.bottom > 0) {
-        this.appendBoxModelLabel(
-          this.marginLabels,
-          element,
-          'margin',
-          'bottom',
-          box.margin.bottom,
-          marginLeft + marginWidth / 2,
-          rect.bottom + box.margin.bottom / 2,
-        );
-      }
-
-      // Left margin label
-      if (box.margin.left > 0) {
-        this.appendBoxModelLabel(
-          this.marginLabels,
-          element,
-          'margin',
-          'left',
-          box.margin.left,
-          marginLeft + box.margin.left / 2,
-          marginTop + marginHeight / 2,
-        );
-      }
-
-      // Right margin label
-      if (box.margin.right > 0) {
-        this.appendBoxModelLabel(
-          this.marginLabels,
-          element,
-          'margin',
-          'right',
-          box.margin.right,
-          rect.right + box.margin.right / 2,
-          marginTop + marginHeight / 2,
-        );
-      }
-    } else {
-      this.marginLabels.style.display = 'none';
+    const marginSpecs = buildBoxModelLabelSpecs('margin', box.margin);
+    if (marginSpecs.length > 0) {
+      batches.push({
+        container: this.marginLabels,
+        entries: marginSpecs.map((spec) => ({
+          el: this.createBoxModelLabel(element, spec.boxType, spec.side, spec.pxValue),
+          anchor: computeBoxModelLabelAnchor(spec.boxType, spec.side, geo, obstacles),
+          side: spec.side,
+        })),
+      });
     }
 
-    // Padding labels - positioned inside the element
-    const hasPadding =
-      box.padding.top > 0 ||
-      box.padding.right > 0 ||
-      box.padding.bottom > 0 ||
-      box.padding.left > 0;
-
-    if (hasPadding) {
-      this.paddingLabels.innerHTML = '';
-      this.paddingLabels.style.display = 'block';
-
-      const innerLeft = rect.left + box.border.left;
-      const innerTop = rect.top + box.border.top;
-      const innerWidth = rect.width - box.border.left - box.border.right;
-      const innerHeight = rect.height - box.border.top - box.border.bottom;
-
-      // Top padding label
-      if (box.padding.top > 0) {
-        this.appendBoxModelLabel(
-          this.paddingLabels,
-          element,
-          'padding',
-          'top',
-          box.padding.top,
-          innerLeft + innerWidth / 2,
-          innerTop + box.padding.top / 2,
-        );
-      }
-
-      // Bottom padding label
-      if (box.padding.bottom > 0) {
-        const bottomEdge = innerTop + innerHeight;
-        this.appendBoxModelLabel(
-          this.paddingLabels,
-          element,
-          'padding',
-          'bottom',
-          box.padding.bottom,
-          innerLeft + innerWidth / 2,
-          bottomEdge - box.padding.bottom / 2,
-        );
-      }
-
-      // Left padding label
-      if (box.padding.left > 0) {
-        this.appendBoxModelLabel(
-          this.paddingLabels,
-          element,
-          'padding',
-          'left',
-          box.padding.left,
-          innerLeft + box.padding.left / 2,
-          innerTop + innerHeight / 2,
-        );
-      }
-
-      // Right padding label
-      if (box.padding.right > 0) {
-        const rightEdge = innerLeft + innerWidth;
-        this.appendBoxModelLabel(
-          this.paddingLabels,
-          element,
-          'padding',
-          'right',
-          box.padding.right,
-          rightEdge - box.padding.right / 2,
-          innerTop + innerHeight / 2,
-        );
-      }
-    } else {
-      this.paddingLabels.style.display = 'none';
+    const paddingSpecs = buildBoxModelLabelSpecs('padding', box.padding);
+    if (paddingSpecs.length > 0) {
+      batches.push({
+        container: this.paddingLabels,
+        entries: paddingSpecs.map((spec) => ({
+          el: this.createBoxModelLabel(element, spec.boxType, spec.side, spec.pxValue),
+          anchor: computeBoxModelLabelAnchor(spec.boxType, spec.side, geo, obstacles),
+          side: spec.side,
+        })),
+      });
     }
+
+    const gapBatch = this.buildGapLabelBatch(element, obstacles);
+    if (gapBatch) batches.push(gapBatch);
+
+    mountAndLayoutOverlayLabels(batches, obstacles, targetRect);
   }
 
   /**
@@ -644,63 +571,6 @@ export class HighlightOverlay {
     label.style.color = '#fff';
     label.textContent = formatBoxModelLabel(element, boxType, side, pxValue);
     return label;
-  }
-
-  private appendBoxModelLabel(
-    container: HTMLElement,
-    element: Element,
-    boxType: 'margin' | 'padding',
-    side: 'top' | 'right' | 'bottom' | 'left',
-    pxValue: number,
-    x: number,
-    y: number,
-  ): void {
-    const label = this.createBoxModelLabel(element, boxType, side, pxValue);
-    label.style.left = `${x}px`;
-    label.style.top = `${y}px`;
-    container.appendChild(label);
-    this.clampBoxModelLabelToViewport(label);
-  }
-
-  /** Nudge centered box-model labels so they stay fully inside the viewport. */
-  private clampBoxModelLabelToViewport(label: HTMLElement, margin = 6): void {
-    let offsetX = 0;
-    let offsetY = 0;
-
-    for (let pass = 0; pass < 2; pass++) {
-      label.style.transform =
-        offsetX === 0 && offsetY === 0
-          ? 'translate(-50%, -50%)'
-          : `translate(calc(-50% + ${offsetX}px), calc(-50% + ${offsetY}px))`;
-
-      const rect = label.getBoundingClientRect();
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-
-      let dx = 0;
-      let dy = 0;
-
-      if (rect.right > viewportWidth - margin) {
-        dx -= rect.right - (viewportWidth - margin);
-      }
-      if (rect.left < margin) {
-        dx += margin - rect.left;
-      }
-      if (rect.bottom > viewportHeight - margin) {
-        dy -= rect.bottom - (viewportHeight - margin);
-      }
-      if (rect.top < margin) {
-        dy += margin - rect.top;
-      }
-
-      if (dx === 0 && dy === 0) break;
-      offsetX += dx;
-      offsetY += dy;
-    }
-
-    if (offsetX !== 0 || offsetY !== 0) {
-      label.style.transform = `translate(calc(-50% + ${offsetX}px), calc(-50% + ${offsetY}px))`;
-    }
   }
 
   /**
@@ -1015,6 +885,26 @@ export class HighlightOverlay {
     return `${rounded}`;
   }
 
+  private buildGapLabelBatch(element: Element, obstacles: DOMRect[]): LabelMountBatch | null {
+    const container = this.resolveGapContainer(element);
+    if (!container) return null;
+
+    const regions = this.computeGapRegions(container);
+    if (regions.length === 0) return null;
+
+    const entries = regions.map((region) => {
+      const anchor = computeGapLabelAnchor(region, obstacles);
+      const label = document.createElement('span');
+      label.className = 'box-label box-label--gap';
+      label.style.background = this.GAP_LABEL_BG;
+      label.style.color = '#fff';
+      label.textContent = this.formatGapLabel(container, region.gapPx, region.kind);
+      return { el: label, anchor, side: anchor.side };
+    });
+
+    return { container: this.gapLabels, entries };
+  }
+
   private showGapOverlay(element: Element): void {
     const container = this.resolveGapContainer(element);
     if (!container) {
@@ -1029,7 +919,6 @@ export class HighlightOverlay {
     }
 
     this.gapOverlays.innerHTML = '';
-    this.gapLabels.innerHTML = '';
 
     for (const region of regions) {
       const overlay = document.createElement('div');
@@ -1039,20 +928,9 @@ export class HighlightOverlay {
       overlay.style.width = `${region.width}px`;
       overlay.style.height = `${region.height}px`;
       this.gapOverlays.appendChild(overlay);
-
-      const label = document.createElement('span');
-      label.className = 'box-label box-label--gap';
-      label.style.background = this.GAP_LABEL_BG;
-      label.style.color = '#fff';
-      label.textContent = this.formatGapLabel(container, region.gapPx, region.kind);
-      label.style.left = `${region.left + region.width / 2}px`;
-      label.style.top = `${region.top + region.height / 2}px`;
-      this.gapLabels.appendChild(label);
-      this.clampBoxModelLabelToViewport(label);
     }
 
     this.gapOverlays.classList.add('visible');
-    this.gapLabels.style.display = 'block';
   }
 
   private hideGapOverlay(): void {

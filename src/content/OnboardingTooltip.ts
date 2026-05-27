@@ -24,6 +24,7 @@ export type OnboardingStep = 0 | 1 | 2 | 3;
  */
 export interface Step2Progress {
   hovered: boolean;
+  copied: boolean;
   usedUp: boolean;
   usedDown: boolean;
   exited: boolean;
@@ -31,6 +32,7 @@ export interface Step2Progress {
 
 export const EMPTY_STEP2_PROGRESS: Step2Progress = {
   hovered: false,
+  copied: false,
   usedUp: false,
   usedDown: false,
   exited: false,
@@ -134,6 +136,12 @@ export class OnboardingTooltip {
     void this.updateStep2Progress({ hovered: true });
   }
 
+  /** Step 2 checklist: user clicked an element to copy its name. */
+  notifyCopy(): void {
+    if (this.step !== 2 || this.step2Progress.copied) return;
+    void this.updateStep2Progress({ copied: true });
+  }
+
   /** Step 2 checklist: user pressed an arrow key while inspecting. */
   notifyArrow(direction: 'up' | 'down' | 'left' | 'right'): void {
     if (this.step !== 2) return;
@@ -206,6 +214,7 @@ export class OnboardingTooltip {
     if (!this.container) return;
     const rules: Array<[keyof Step2Progress, boolean]> = [
       ['hovered', this.step2Progress.hovered],
+      ['copied', this.step2Progress.copied],
       ['usedDown', this.step2Progress.usedDown],
       ['usedUp', this.step2Progress.usedUp],
       ['exited', this.step2Progress.exited],
@@ -224,8 +233,8 @@ export class OnboardingTooltip {
    * tooltip swaps content.
    */
   private maybeAutoAdvanceFromStep2(): void {
-    const { hovered, usedUp, usedDown, exited } = this.step2Progress;
-    if (!(hovered && usedUp && usedDown && exited)) return;
+    const { hovered, copied, usedUp, usedDown, exited } = this.step2Progress;
+    if (!(hovered && copied && usedUp && usedDown && exited)) return;
     if (this.autoAdvanceTimer !== null) return; // already scheduled
     this.autoAdvanceTimer = window.setTimeout(() => {
       this.autoAdvanceTimer = null;
@@ -617,6 +626,10 @@ export class OnboardingTooltip {
             <li class="rl-onb-check-item" data-key="hovered">
               <span class="rl-onb-check-circle">${checkIcon}</span>
               <span class="rl-onb-check-label">Hover any element to see its layout</span>
+            </li>
+            <li class="rl-onb-check-item" data-key="copied">
+              <span class="rl-onb-check-circle">${checkIcon}</span>
+              <span class="rl-onb-check-label">Click to copy a div's name</span>
             </li>
             <li class="rl-onb-check-item" data-key="usedDown">
               <span class="rl-onb-check-circle">${checkIcon}</span>

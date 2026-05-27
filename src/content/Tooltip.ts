@@ -317,6 +317,14 @@ export class Tooltip {
     return this.tooltip.classList.contains('visible');
   }
 
+  /** Viewport rect of the visible tooltip, for label collision avoidance. */
+  getRect(): DOMRect | null {
+    if (!this.isVisible()) return null;
+    const rect = this.tooltip.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    return rect;
+  }
+
   /**
    * Remove tooltip from DOM
    */

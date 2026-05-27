@@ -96,6 +96,7 @@ const FAB_COLLAPSED_KEY = 'redline-floating-button-collapsed';
 
 const EMPTY_STEP2_PROGRESS = {
   hovered: false,
+  copied: false,
   usedUp: false,
   usedDown: false,
   exited: false,

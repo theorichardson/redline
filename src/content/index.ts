@@ -89,6 +89,7 @@ const onboarding = new OnboardingTooltip({
 const inspector = new ElementInspector({
   onDeactivate: () => syncButtonStates(),
   onHover: () => onboarding.notifyHover(),
+  onCopy: () => onboarding.notifyCopy(),
   onArrowKey: (dir) => onboarding.notifyArrow(dir),
   onEscape: () => onboarding.notifyEscape(),
 });
@@ -148,6 +149,7 @@ function normalizeStep2Progress(raw: unknown): Step2Progress {
   const r = raw as Partial<Step2Progress>;
   return {
     hovered: r.hovered === true,
+    copied: r.copied === true,
     usedUp: r.usedUp === true,
     usedDown: r.usedDown === true,
     exited: r.exited === true,
