@@ -21,6 +21,17 @@
     --scene-shadow: 0 18px 48px rgba(0, 0, 0, 0.1), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
 }
 
+/* Desktop-style frame around the mock browser window */
+.demo-desktop {
+    border-radius: 20px;
+    overflow: hidden;
+    padding: clamp(20px, 3.5vw, 36px);
+    background:
+        radial-gradient(ellipse 90% 70% at 15% 25%, rgba(230, 57, 70, 0.14) 0%, transparent 58%),
+        radial-gradient(ellipse 75% 55% at 88% 78%, rgba(230, 57, 70, 0.09) 0%, transparent 52%),
+        linear-gradient(155deg, #faf7f7 0%, #f4e8ea 42%, #eee8f0 100%);
+}
+
 .product-visual {
     margin: 0;
     border-radius: var(--scene-radius);
