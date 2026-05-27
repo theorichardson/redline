@@ -30,11 +30,21 @@ main {
     padding-bottom: 40px;
 }
 
-.app-icon {
+.app-logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     width: 88px;
     height: 88px;
-    border-radius: 12px;
     margin-bottom: 18px;
+    border-radius: 12px;
+    background: var(--accent);
+    color: #fff;
+}
+
+.app-logo__icon {
+    width: 40px;
+    height: 40px;
 }
 
 h1 {
