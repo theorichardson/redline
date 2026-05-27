@@ -19,13 +19,7 @@
   let hoveredEl = null;
   let copyTimeout = null;
 
-  const MARGIN_COLOR = 'rgba(255, 155, 120, 0.32)';
-  const PADDING_COLOR = 'rgba(120, 200, 140, 0.32)';
-  const MARGIN_LABEL_BG = 'rgba(230, 100, 80, 0.95)';
-  const PADDING_LABEL_BG = 'rgba(80, 160, 100, 0.95)';
-  const GAP_COLOR = 'rgba(190, 165, 230, 0.38)';
-  const GAP_LABEL_BG = 'rgba(130, 100, 190, 0.95)';
-  const GUIDE_COLOR = '#e63946';
+  const VIEWPORT_MARGIN = 4;
 
   const layers = {
     margin: overlay.querySelector('.rl-margin-layer'),
@@ -173,216 +167,76 @@
     layers.gapLabels.innerHTML = '';
   }
 
-  function addLabel(container, text, x, y, kind) {
+  function clampLabelToDemoViewport(label) {
+    const vr = viewportRect();
+    const minLeft = VIEWPORT_MARGIN;
+    const minTop = VIEWPORT_MARGIN;
+    const maxRight = vr.width - VIEWPORT_MARGIN;
+    const maxBottom = vr.height - VIEWPORT_MARGIN;
+
+    for (let pass = 0; pass < 2; pass++) {
+      const rect = label.getBoundingClientRect();
+      let dx = 0;
+      let dy = 0;
+
+      if (rect.left < vr.left + minLeft) dx += vr.left + minLeft - rect.left;
+      if (rect.right > vr.left + maxRight) dx -= rect.right - (vr.left + maxRight);
+      if (rect.top < vr.top + minTop) dy += vr.top + minTop - rect.top;
+      if (rect.bottom > vr.top + maxBottom) dy -= rect.bottom - (vr.top + maxBottom);
+
+      if (!dx && !dy) break;
+      label.style.left = `${parseFloat(label.style.left) + dx}px`;
+      label.style.top = `${parseFloat(label.style.top) + dy}px`;
+    }
+  }
+
+  function pickPaddingSide(box) {
+    const sides = ['top', 'right', 'bottom', 'left'];
+    return sides.find((side) => box.padding[side] > 0) || 'top';
+  }
+
+  /** Single padding token label — top-left outside the element, like the name tooltip. */
+  function placePaddingLabel(el, rect, box) {
+    const side = pickPaddingSide(box);
+    const px = box.padding[side];
+    if (px <= 0) return;
+
     const label = document.createElement('span');
-    label.className = `rl-box-label rl-box-label--${kind}`;
-    label.textContent = text;
-    label.style.left = `${x}px`;
-    label.style.top = `${y}px`;
-    container.appendChild(label);
-  }
+    label.className = 'rl-box-label rl-box-label--padding';
+    label.textContent = formatBoxLabel(el, 'padding', side, px);
+    layers.paddingLabels.appendChild(label);
 
-  function parseGap(value) {
-    if (!value || value === 'normal') return 0;
-    const n = parseFloat(value);
-    return isFinite(n) && n > 0 ? Math.round(n) : 0;
-  }
+    const gap = 8;
+    label.style.visibility = 'hidden';
+    label.style.display = 'block';
+    label.style.left = `${rect.left}px`;
+    label.style.top = `${rect.top - gap}px`;
+    label.style.transform = 'translate(0, -100%)';
+    label.style.visibility = '';
 
-  function resolveGapContainer(element) {
-    const selfStyle = getComputedStyle(element);
-    if (/flex|grid/.test(selfStyle.display)) {
-      const rowGap = parseGap(selfStyle.rowGap) || parseGap(selfStyle.gap);
-      const colGap = parseGap(selfStyle.columnGap) || parseGap(selfStyle.gap);
-      if (rowGap > 0 || colGap > 0) return element;
-    }
-
-    const parent = element.parentElement;
-    if (!parent?.closest('.rl-demo-page')) return null;
-
-    const parentStyle = getComputedStyle(parent);
-    if (/flex|grid/.test(parentStyle.display)) {
-      const rowGap = parseGap(parentStyle.rowGap) || parseGap(parentStyle.gap);
-      const colGap = parseGap(parentStyle.columnGap) || parseGap(parentStyle.gap);
-      if (rowGap > 0 || colGap > 0) return parent;
-    }
-
-    return null;
-  }
-
-  function getVisibleChildren(container) {
-    return Array.from(container.children).filter((el) => {
-      const style = getComputedStyle(el);
-      if (style.display === 'none' || style.visibility === 'hidden') return false;
-      const rect = el.getBoundingClientRect();
-      return rect.width > 0 && rect.height > 0;
-    });
-  }
-
-  function groupIntoRows(elements, tolerance = 8) {
-    const items = elements.map((el) => ({ el, rect: el.getBoundingClientRect() }));
-    if (items.length === 0) return [];
-
-    const sorted = [...items].sort((a, b) => a.rect.top - b.rect.top || a.rect.left - b.rect.left);
-    const rows = [[sorted[0]]];
-
-    for (let i = 1; i < sorted.length; i++) {
-      const item = sorted[i];
-      const lastRow = rows[rows.length - 1];
-      if (Math.abs(item.rect.top - lastRow[0].rect.top) <= tolerance) {
-        lastRow.push(item);
-      } else {
-        rows.push([item]);
-      }
-    }
-
-    return rows;
-  }
-
-  function formatGapLabel(container, gapPx, kind) {
-    const prop = kind === 'row' ? 'row-gap' : 'column-gap';
-    const token =
-      extractToken(getDeclaredValue(container, prop)) ||
-      extractToken(getDeclaredValue(container, 'gap')) ||
-      `spacing-${Math.round(gapPx / 4)}`;
-    return `${token} (${Math.round(gapPx)}px)`;
-  }
-
-  function addGapRegion(left, top, width, height, label) {
-    if (width <= 0 || height <= 0) return;
-    const region = document.createElement('div');
-    region.className = 'rl-gap-layer';
-    region.style.top = `${top}px`;
-    region.style.left = `${left}px`;
-    region.style.width = `${width}px`;
-    region.style.height = `${height}px`;
-    layers.gap.appendChild(region);
-    addLabel(layers.gapLabels, label, left + width / 2, top + height / 2, 'gap');
-  }
-
-  function drawColumnGap(aRect, bRect, label) {
-    const vr = viewportRect();
-    const gapLeft = aRect.right - vr.left;
-    const gapTop = Math.max(aRect.top, bRect.top) - vr.top;
-    const gapWidth = bRect.left - aRect.right;
-    const gapHeight = Math.min(aRect.bottom, bRect.bottom) - Math.max(aRect.top, bRect.top);
-    addGapRegion(gapLeft, gapTop, gapWidth, gapHeight, label);
-  }
-
-  function drawRowGap(aRect, bRect, label) {
-    const vr = viewportRect();
-    const gapTop = aRect.bottom - vr.top;
-    const gapLeft = Math.max(aRect.left, bRect.left) - vr.left;
-    const gapHeight = bRect.top - aRect.bottom;
-    const gapWidth = Math.min(aRect.right, bRect.right) - Math.max(aRect.left, bRect.left);
-    addGapRegion(gapLeft, gapTop, gapWidth, gapHeight, label);
-  }
-
-  function showGapForContainer(container) {
-    const style = getComputedStyle(container);
-    const isGrid = style.display.includes('grid');
-    const isFlex = style.display.includes('flex');
-    if (!isGrid && !isFlex) return;
-
-    const rowGap = parseGap(style.rowGap) || parseGap(style.gap);
-    const colGap = parseGap(style.columnGap) || parseGap(style.gap);
-    if (rowGap <= 0 && colGap <= 0) return;
-
-    const children = getVisibleChildren(container);
-    if (children.length < 2) return;
-
-    const colLabel = formatGapLabel(container, colGap || rowGap, 'column');
-    const rowLabel = formatGapLabel(container, rowGap || colGap, 'row');
-
-    if (isGrid) {
-      const rows = groupIntoRows(children);
-      for (const row of rows) {
-        const sorted = [...row].sort((a, b) => a.rect.left - b.rect.left);
-        for (let i = 0; i < sorted.length - 1; i++) {
-          if (colGap > 0) drawColumnGap(sorted[i].rect, sorted[i + 1].rect, colLabel);
-        }
-      }
-      if (rowGap > 0 && rows.length > 1) {
-        for (let i = 0; i < rows.length - 1; i++) {
-          const current = rows[i];
-          const next = rows[i + 1];
-          const bottomItem = current.reduce((best, item) =>
-            item.rect.bottom > best.rect.bottom ? item : best, current[0]);
-          const topItem = next.reduce((best, item) =>
-            item.rect.top < best.rect.top ? item : best, next[0]);
-          drawRowGap(bottomItem.rect, topItem.rect, rowLabel);
-        }
-      }
-      return;
-    }
-
-    const direction = style.flexDirection || 'row';
-    const isRow = direction.startsWith('row');
-
-    if (isRow && colGap > 0) {
-      for (let i = 0; i < children.length - 1; i++) {
-        drawColumnGap(
-          children[i].getBoundingClientRect(),
-          children[i + 1].getBoundingClientRect(),
-          colLabel,
-        );
-      }
-    }
-
-    if (!isRow && rowGap > 0) {
-      for (let i = 0; i < children.length - 1; i++) {
-        drawRowGap(
-          children[i].getBoundingClientRect(),
-          children[i + 1].getBoundingClientRect(),
-          rowLabel,
-        );
-      }
-    }
+    clampLabelToDemoViewport(label);
   }
 
   function showBoxModel(el, rect, box) {
     hideBoxModel();
-    const hasMargin = box.margin.top || box.margin.right || box.margin.bottom || box.margin.left;
-    if (hasMargin) {
-      const mTop = rect.top - box.margin.top;
-      const mLeft = rect.left - box.margin.left;
-      const mW = rect.width + box.margin.left + box.margin.right;
-      const mH = rect.height + box.margin.top + box.margin.bottom;
-      setFrame(layers.margin, { top: mTop, left: mLeft, width: mW, height: mH }, {
-        top: box.margin.top,
-        left: box.margin.left,
-        right: mW - box.margin.right,
-        bottom: mH - box.margin.bottom,
-      });
 
-      if (box.margin.top) addLabel(layers.marginLabels, formatBoxLabel(el, 'margin', 'top', box.margin.top), mLeft + mW / 2, mTop + box.margin.top / 2, 'margin');
-      if (box.margin.bottom) addLabel(layers.marginLabels, formatBoxLabel(el, 'margin', 'bottom', box.margin.bottom), mLeft + mW / 2, rect.top + rect.height + box.margin.bottom / 2, 'margin');
-      if (box.margin.left) addLabel(layers.marginLabels, formatBoxLabel(el, 'margin', 'left', box.margin.left), mLeft + box.margin.left / 2, mTop + mH / 2, 'margin');
-      if (box.margin.right) addLabel(layers.marginLabels, formatBoxLabel(el, 'margin', 'right', box.margin.right), rect.left + rect.width + box.margin.right / 2, mTop + mH / 2, 'margin');
-    }
+    const hasPadding =
+      box.padding.top || box.padding.right || box.padding.bottom || box.padding.left;
+    if (!hasPadding) return;
 
-    const hasPadding = box.padding.top || box.padding.right || box.padding.bottom || box.padding.left;
-    if (hasPadding) {
-      const pTop = rect.top + box.border.top;
-      const pLeft = rect.left + box.border.left;
-      const pW = rect.width - box.border.left - box.border.right;
-      const pH = rect.height - box.border.top - box.border.bottom;
-      setFrame(layers.padding, { top: pTop, left: pLeft, width: pW, height: pH }, {
-        top: box.padding.top,
-        left: box.padding.left,
-        right: pW - box.padding.right,
-        bottom: pH - box.padding.bottom,
-      });
+    const pTop = rect.top + box.border.top;
+    const pLeft = rect.left + box.border.left;
+    const pW = rect.width - box.border.left - box.border.right;
+    const pH = rect.height - box.border.top - box.border.bottom;
 
-      const innerW = pW;
-      const innerH = pH;
-      if (box.padding.top) addLabel(layers.paddingLabels, formatBoxLabel(el, 'padding', 'top', box.padding.top), pLeft + innerW / 2, pTop + box.padding.top / 2, 'padding');
-      if (box.padding.bottom) addLabel(layers.paddingLabels, formatBoxLabel(el, 'padding', 'bottom', box.padding.bottom), pLeft + innerW / 2, pTop + innerH - box.padding.bottom / 2, 'padding');
-      if (box.padding.left) addLabel(layers.paddingLabels, formatBoxLabel(el, 'padding', 'left', box.padding.left), pLeft + box.padding.left / 2, pTop + innerH / 2, 'padding');
-      if (box.padding.right) addLabel(layers.paddingLabels, formatBoxLabel(el, 'padding', 'right', box.padding.right), pLeft + innerW - box.padding.right / 2, pTop + innerH / 2, 'padding');
-    }
+    setFrame(layers.padding, { top: pTop, left: pLeft, width: pW, height: pH }, {
+      top: box.padding.top,
+      left: box.padding.left,
+      right: pW - box.padding.right,
+      bottom: pH - box.padding.bottom,
+    });
 
-    const gapContainer = resolveGapContainer(el);
-    if (gapContainer) showGapForContainer(gapContainer);
+    placePaddingLabel(el, rect, box);
   }
 
   function showGuides(el, rect) {
@@ -464,14 +318,10 @@
     layers.tooltip.style.display = 'block';
     layers.tooltip.style.visibility = 'hidden';
 
-    const mTop = box.margin.top;
-    const mBottom = box.margin.bottom;
-    const mLeft = box.margin.left;
-    const mRight = box.margin.right;
-    const targetTop = rect.top - mTop;
-    const targetLeft = rect.left - mLeft;
-    const targetW = rect.width + mLeft + mRight;
-    const targetH = rect.height + mTop + mBottom;
+    const targetTop = rect.top;
+    const targetLeft = rect.left;
+    const targetW = rect.width;
+    const targetH = rect.height;
 
     const ttRect = layers.tooltip.getBoundingClientRect();
     const vr = viewportRect();
