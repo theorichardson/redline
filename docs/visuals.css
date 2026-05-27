@@ -1,0 +1,704 @@
+/* Redline interactive demo — extension UI tokens and mock page */
+
+:root {
+    --rl-red: #e63946;
+    --rl-red-hover: #d62839;
+    --rl-tooltip-bg: #000000;
+    --rl-fab-bg: #000000;
+    --rl-fab-border: rgba(255, 255, 255, 0.15);
+    --rl-block-bg: #ffffff;
+    --rl-block-muted: #e8e8ed;
+    --rl-block-accent: #d1d1d6;
+    --rl-icon-bg: #f2f2f7;
+    --rl-icon-accent: rgba(230, 57, 70, 0.12);
+    --margin-fill: rgba(255, 155, 120, 0.32);
+    --padding-fill: rgba(120, 200, 140, 0.32);
+    --gap-fill: rgba(190, 165, 230, 0.38);
+    --margin-label: rgba(230, 100, 80, 0.95);
+    --padding-label: rgba(80, 160, 100, 0.95);
+    --gap-label: rgba(130, 100, 190, 0.95);
+    --scene-radius: 12px;
+    --scene-shadow: 0 18px 48px rgba(0, 0, 0, 0.1), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+}
+
+.product-visual {
+    margin: 0;
+    border-radius: var(--scene-radius);
+    overflow: hidden;
+    box-shadow: var(--scene-shadow);
+    position: relative;
+    user-select: none;
+    background: #f5f5f7;
+}
+
+/* ── Demo viewport ── */
+
+.demo-visual {
+    aspect-ratio: 16 / 10;
+    min-height: 420px;
+    cursor: crosshair;
+}
+
+.demo-visual:not(.rl-demo-active) {
+    cursor: default;
+}
+
+.demo-visual:not(.rl-demo-active) .rl-demo-page [data-rl] {
+    cursor: default;
+}
+
+.rl-demo-page {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    --space-sm: 16px;
+    --space-md: 24px;
+    --spacing: 4px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.rl-demo-page [data-rl] {
+    cursor: crosshair;
+}
+
+/* Mock browser chrome */
+.demo-chrome {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 14px;
+    background: #ffffff;
+    border-bottom: 0.5px solid rgba(0, 0, 0, 0.08);
+}
+
+.demo-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--rl-block-muted);
+}
+
+.demo-url {
+    margin-left: 8px;
+    font-size: 11px;
+    color: #6e6e73;
+    letter-spacing: -0.01em;
+}
+
+/* App shell — generic dashboard, not a marketing page */
+.demo-app {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    overflow: hidden;
+}
+
+.demo-sidebar {
+    flex-shrink: 0;
+    width: 148px;
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--spacing) * 4);
+    padding: var(--space-sm);
+    background: #ffffff;
+    border-right: 0.5px solid rgba(0, 0, 0, 0.08);
+}
+
+.demo-sidebar-brand {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: #1d1d1f;
+    padding: calc(var(--spacing) * 1) calc(var(--spacing) * 2);
+}
+
+.demo-sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--spacing) * 1);
+}
+
+.demo-sidebar-item {
+    font-size: 12px;
+    color: #6e6e73;
+    padding: calc(var(--spacing) * 2) calc(var(--spacing) * 2);
+    border-radius: 6px;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+}
+
+.demo-sidebar-item.active {
+    background: #f2f2f7;
+    color: #1d1d1f;
+    font-weight: 500;
+}
+
+.demo-main {
+    flex: 1;
+    min-width: 0;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--spacing) * 4);
+    padding: var(--space-md);
+    padding-bottom: calc(var(--space-md) + 36px);
+}
+
+.demo-toolbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: calc(var(--spacing) * 4);
+}
+
+.demo-toolbar-text {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--spacing) * 1);
+    min-width: 0;
+}
+
+.demo-page-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: #1d1d1f;
+    line-height: 1.2;
+}
+
+.demo-page-subtitle {
+    margin: 0;
+    font-size: 11px;
+    color: #6e6e73;
+    line-height: 1.3;
+}
+
+.demo-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--spacing) * 2);
+    flex-shrink: 0;
+}
+
+.demo-btn {
+    border: none;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 500;
+    padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
+    border-radius: 6px;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+    cursor: default;
+}
+
+.demo-btn.ghost {
+    background: transparent;
+    color: #6e6e73;
+    box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.12);
+}
+
+.demo-btn.primary {
+    background: #1d1d1f;
+    color: #fff;
+}
+
+.demo-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: calc(var(--spacing) * 3);
+}
+
+.demo-stat {
+    background: #ffffff;
+    border: 0.5px solid rgba(0, 0, 0, 0.08);
+    border-radius: 8px;
+    padding: var(--space-sm);
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--spacing) * 1);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.demo-stat-label {
+    font-size: 10px;
+    font-weight: 500;
+    color: #6e6e73;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.demo-stat-value {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    color: #1d1d1f;
+    line-height: 1;
+}
+
+.demo-panel {
+    background: #ffffff;
+    border: 0.5px solid rgba(0, 0, 0, 0.08);
+    border-radius: 10px;
+    padding: var(--space-sm);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--spacing) * 3);
+}
+
+.demo-panel-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: calc(var(--spacing) * 2);
+    padding-bottom: calc(var(--spacing) * 2);
+    border-bottom: 0.5px solid rgba(0, 0, 0, 0.06);
+}
+
+.demo-panel-title {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: #1d1d1f;
+}
+
+.demo-panel-meta {
+    font-size: 11px;
+    color: #6e6e73;
+}
+
+.demo-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--spacing) * 1);
+}
+
+.demo-list-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: calc(var(--spacing) * 3);
+    padding: calc(var(--spacing) * 2) calc(var(--spacing) * 2);
+    border-radius: 6px;
+}
+
+.demo-list-row:hover {
+    background: #fafafa;
+}
+
+.demo-list-name {
+    font-size: 12px;
+    color: #1d1d1f;
+    letter-spacing: -0.01em;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.demo-list-badge {
+    font-size: 10px;
+    font-weight: 500;
+    padding: calc(var(--spacing) * 1) calc(var(--spacing) * 2);
+    border-radius: 4px;
+    letter-spacing: 0.01em;
+}
+
+.demo-list-badge.live {
+    background: rgba(52, 168, 83, 0.12);
+    color: #2d8a47;
+}
+
+.demo-list-badge.paused {
+    background: #f2f2f7;
+    color: #6e6e73;
+}
+
+.demo-list-stat {
+    font-size: 11px;
+    font-weight: 500;
+    color: #6e6e73;
+    font-variant-numeric: tabular-nums;
+    min-width: 3.5em;
+    text-align: right;
+}
+
+/* ── Overlay layers (mirrors HighlightOverlay + AlignmentGuides) ── */
+
+.rl-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 5;
+    overflow: hidden;
+}
+
+.rl-margin-layer,
+.rl-padding-layer {
+    position: absolute;
+    pointer-events: none;
+    display: none;
+}
+
+.rl-margin-layer {
+    background: var(--margin-fill);
+}
+
+.rl-padding-layer {
+    background: var(--padding-fill);
+}
+
+.rl-gap-layers {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.rl-gap-layer {
+    position: absolute;
+    background: var(--gap-fill);
+    pointer-events: none;
+}
+
+.rl-box {
+    position: absolute;
+    border: 2px solid var(--rl-red);
+    border-radius: 2px;
+    box-sizing: border-box;
+    display: none;
+    pointer-events: none;
+    z-index: 6;
+}
+
+.rl-margin-labels,
+.rl-padding-labels,
+.rl-gap-labels {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: visible;
+    z-index: 7;
+}
+
+.rl-box-label {
+    position: absolute;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Mono", Monaco, monospace;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+    color: #fff;
+    transform: translate(-50%, -50%);
+}
+
+.rl-box-label--margin { background: var(--margin-label); }
+.rl-box-label--padding { background: var(--padding-label); }
+.rl-box-label--gap { background: var(--gap-label); }
+
+.rl-guides {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: visible;
+    z-index: 4;
+}
+
+.rl-guide-line {
+    position: absolute;
+    background: var(--rl-red);
+    pointer-events: none;
+    opacity: 0.4;
+}
+
+.rl-guide-line.horizontal {
+    height: 1px;
+    left: -200%;
+    right: -200%;
+}
+
+.rl-guide-line.vertical {
+    width: 1px;
+    top: -200%;
+    bottom: -200%;
+}
+
+.rl-guide-line.selected {
+    opacity: 1;
+}
+
+/* Tooltip — matches Tooltip.ts dark medium variant */
+.rl-tooltip {
+    position: absolute;
+    display: none;
+    background: var(--rl-tooltip-bg);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    line-height: 1.3;
+    z-index: 10;
+}
+
+.rl-tooltip .label {
+    color: rgba(255, 255, 255, 0.7);
+    margin-right: 4px;
+}
+
+.rl-tooltip .value {
+    color: #fff;
+}
+
+/* ── Bottom chip — matches FloatingButton.ts ── */
+
+.rl-demo-fab {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    transition: bottom 0.2s ease;
+    pointer-events: auto;
+}
+
+.redline-buttons-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 4px;
+    background: #000000;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 24px;
+    box-shadow:
+        0 4px 12px rgba(0, 0, 0, 0.15),
+        0 1px 3px rgba(0, 0, 0, 0.1);
+    user-select: none;
+    transition: all 0.45s cubic-bezier(0.34, 1.35, 0.64, 1);
+}
+
+.redline-fab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: white;
+    cursor: pointer;
+    transition:
+        all 0.45s cubic-bezier(0.34, 1.35, 0.64, 1),
+        filter 0.45s cubic-bezier(0.34, 1.35, 0.64, 1),
+        transform 0.45s cubic-bezier(0.34, 1.35, 0.64, 1);
+    outline: none;
+    padding: 0;
+    position: relative;
+}
+
+.redline-fab:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.redline-fab:active {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.redline-fab--active {
+    background: #e63946;
+    color: white;
+}
+
+.redline-fab--active:hover {
+    background: #d62839;
+    color: white;
+}
+
+.redline-fab svg {
+    flex-shrink: 0;
+}
+
+.btn-tooltip {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%) translateY(4px);
+    background: #000000;
+    color: #fff;
+    padding: 3px 6px;
+    border-radius: 3px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+    pointer-events: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    opacity: 0;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    z-index: 1000;
+}
+
+.redline-fab:hover .btn-tooltip {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.redline-collapse-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: white;
+    cursor: pointer;
+    transition: all 0.45s cubic-bezier(0.34, 1.35, 0.64, 1);
+    outline: none;
+    padding: 0;
+}
+
+.redline-collapse-btn svg {
+    flex-shrink: 0;
+    transition: transform 0.45s cubic-bezier(0.34, 1.35, 0.64, 1);
+}
+
+.redline-collapse-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.redline-collapse-btn:active {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* Collapsed chip state */
+.rl-demo-fab.collapsed {
+    bottom: 0;
+}
+
+.rl-demo-fab.collapsed .redline-buttons-container {
+    border-radius: 8px 8px 0 0;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.15);
+    padding: 2px;
+    gap: 0;
+    width: fit-content;
+    margin: 0 auto;
+}
+
+.rl-demo-fab.collapsed .redline-fab {
+    width: 0;
+    height: 0;
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
+    margin: 0;
+    opacity: 0;
+    overflow: hidden;
+    filter: blur(4px);
+    transform: scale(0.3);
+    pointer-events: none;
+}
+
+.rl-demo-fab.collapsed .redline-collapse-btn {
+    width: 24px;
+    height: 16px;
+    border-radius: 6px 6px 0 0;
+    margin: 0;
+}
+
+.rl-demo-fab.collapsed .redline-collapse-btn svg {
+    transform: rotate(180deg);
+}
+
+@media (max-width: 720px) {
+    .demo-visual {
+        min-height: 340px;
+        aspect-ratio: 4 / 3;
+    }
+
+    .demo-sidebar {
+        width: 108px;
+    }
+
+    .demo-main {
+        padding: 14px;
+        padding-bottom: 48px;
+        gap: 12px;
+    }
+
+    .demo-page-title {
+        font-size: 15px;
+    }
+
+    .demo-stats {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .demo-stat:last-child {
+        display: none;
+    }
+
+    .demo-toolbar-actions .demo-btn.ghost {
+        display: none;
+    }
+
+    .rl-demo-fab {
+        transform: translateX(-50%) scale(0.92);
+    }
+}
+
+@media (max-width: 560px) {
+    .demo-visual {
+        min-height: 300px;
+    }
+
+    .demo-sidebar {
+        width: 72px;
+    }
+
+    .demo-sidebar-item {
+        font-size: 10px;
+        padding: 6px 4px;
+    }
+
+    .demo-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .demo-stat:last-child {
+        display: flex;
+    }
+
+    .demo-list-badge {
+        display: none;
+    }
+
+    .rl-tooltip {
+        font-size: 11px;
+        padding: 5px 8px;
+        max-width: calc(100% - 16px);
+        white-space: normal;
+    }
+
+    .rl-box-label {
+        font-size: 8px;
+        padding: 2px 4px;
+    }
+}

@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Redline — Visual alignment rulers and layer navigation for the web</title>
+<meta name="description" content="A Chrome extension for debugging web layout. Inspect elements, visualize padding and margin, draw alignment guides, and navigate the DOM with keyboard shortcuts." />
+<link rel="icon" href="app-icon.png" type="image/png" />
+<link rel="apple-touch-icon" href="app-icon-256.png" />
+<link rel="stylesheet" href="styles.css" />
+<link rel="stylesheet" href="visuals.css" />
+</head>
+<body>
+<main>
+    <header class="hero">
+        <img class="app-icon" src="app-icon.png" width="112" height="112" alt="" />
+        <h1>Redline</h1>
+        <p class="tagline">Visual alignment rulers and layer navigation while you inspect layouts.</p>
+        <a class="download" href="https://github.com/theorichardson/redline#install-development">
+            Install extension
+        </a>
+        <p class="meta">Chrome · Alt+Shift+R to toggle</p>
+    </header>
+
+    <section class="demo-section" aria-label="Interactive Redline preview">
+        <figure class="product-visual demo-visual" id="rl-demo-viewport">
+            <div class="rl-demo-page">
+                <div class="demo-chrome" data-rl>
+                    <span class="demo-dot"></span>
+                    <span class="demo-dot"></span>
+                    <span class="demo-dot"></span>
+                    <span class="demo-url">app.acme.co/dashboard</span>
+                </div>
+                <div class="demo-app">
+                    <aside class="demo-sidebar" data-rl>
+                        <div class="demo-sidebar-brand" data-rl>Acme</div>
+                        <nav class="demo-sidebar-nav" data-rl>
+                            <span class="demo-sidebar-item active" data-rl>Overview</span>
+                            <span class="demo-sidebar-item" data-rl>Campaigns</span>
+                            <span class="demo-sidebar-item" data-rl>Audience</span>
+                            <span class="demo-sidebar-item" data-rl>Settings</span>
+                        </nav>
+                    </aside>
+
+                    <div class="demo-main">
+                        <header class="demo-toolbar" data-rl>
+                            <div class="demo-toolbar-text" data-rl>
+                                <h1 class="demo-page-title" data-rl>Campaign overview</h1>
+                                <p class="demo-page-subtitle" data-rl>Last updated 4 min ago</p>
+                            </div>
+                            <div class="demo-toolbar-actions" data-rl>
+                                <button type="button" class="demo-btn ghost" data-rl>Export</button>
+                                <button type="button" class="demo-btn primary" data-rl>New campaign</button>
+                            </div>
+                        </header>
+
+                        <div class="demo-stats" data-rl>
+                            <div class="demo-stat" data-rl>
+                                <span class="demo-stat-label" data-rl>Impressions</span>
+                                <span class="demo-stat-value" data-rl>128.4k</span>
+                            </div>
+                            <div class="demo-stat" data-rl>
+                                <span class="demo-stat-label" data-rl>Click rate</span>
+                                <span class="demo-stat-value" data-rl>3.2%</span>
+                            </div>
+                            <div class="demo-stat" data-rl>
+                                <span class="demo-stat-label" data-rl>Conversions</span>
+                                <span class="demo-stat-value" data-rl>842</span>
+                            </div>
+                        </div>
+
+                        <section class="demo-panel" data-rl>
+                            <div class="demo-panel-header" data-rl>
+                                <h2 class="demo-panel-title" data-rl>Recent campaigns</h2>
+                                <span class="demo-panel-meta" data-rl>3 active</span>
+                            </div>
+                            <ul class="demo-list" data-rl>
+                                <li class="demo-list-row" data-rl>
+                                    <span class="demo-list-name" data-rl>Spring launch</span>
+                                    <span class="demo-list-badge live" data-rl>Live</span>
+                                    <span class="demo-list-stat" data-rl>12.1k</span>
+                                </li>
+                                <li class="demo-list-row" data-rl>
+                                    <span class="demo-list-name" data-rl>Retargeting — cart</span>
+                                    <span class="demo-list-badge paused" data-rl>Paused</span>
+                                    <span class="demo-list-stat" data-rl>4.8k</span>
+                                </li>
+                                <li class="demo-list-row" data-rl>
+                                    <span class="demo-list-name" data-rl>Newsletter signup</span>
+                                    <span class="demo-list-badge live" data-rl>Live</span>
+                                    <span class="demo-list-stat" data-rl>9.3k</span>
+                                </li>
+                            </ul>
+                        </section>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rl-overlay" aria-hidden="true">
+                <div class="rl-margin-layer"></div>
+                <div class="rl-padding-layer"></div>
+                <div class="rl-gap-layers"></div>
+                <div class="rl-guides"></div>
+                <div class="rl-box"></div>
+                <div class="rl-margin-labels"></div>
+                <div class="rl-padding-labels"></div>
+                <div class="rl-gap-labels"></div>
+                <div class="rl-tooltip"></div>
+            </div>
+
+            <div id="rl-demo-fab" class="rl-demo-fab">
+                <div class="redline-buttons-container">
+                    <button type="button" class="redline-fab redline-fab--active" aria-label="Toggle Redline Mode" aria-pressed="true">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M10 15v-3"/><path d="M14 15v-3"/><path d="M18 15v-3"/><path d="M2 8V4"/><path d="M22 6H2"/><path d="M22 8V4"/><path d="M6 15v-3"/>
+                            <rect x="2" y="12" width="20" height="8" rx="2"/>
+                        </svg>
+                        <span class="btn-tooltip">Redline</span>
+                    </button>
+                    <button type="button" class="redline-collapse-btn" aria-label="Collapse buttons" title="Collapse buttons">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="m6 9 6 6 6-6"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </figure>
+        <p class="demo-hint">Hover to inspect · Click to copy selector · Collapse the chip to hide Redline</p>
+    </section>
+
+    <footer>
+        <div class="links">
+            <a href="https://github.com/theorichardson/redline">GitHub</a>
+            <a href="https://github.com/theorichardson/redline/releases">Releases</a>
+            <a href="privacy">Privacy</a>
+        </div>
+        <p class="copy">Chrome extension · Runs entirely locally · © 2026 Theodore Richardson</p>
+    </footer>
+</main>
+<script src="demo.js"></script>
+</body>
+</html>

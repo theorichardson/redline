@@ -1,4 +1,4 @@
-import { formatBoxModelLabel } from './boxModelTokenLabel';
+import { extractDesignTokenName, formatBoxModelLabel } from './boxModelTokenLabel';
 import { Tooltip, createTooltipContent } from './Tooltip';
 import { formatElementDisplayName } from './elementDisplayName';
 import type { TypographyStyles } from '../shared/types';
@@ -14,6 +14,20 @@ interface BoxModelValues {
   margin: { top: number; right: number; bottom: number; left: number };
   border: { top: number; right: number; bottom: number; left: number };
   padding: { top: number; right: number; bottom: number; left: number };
+}
+
+interface LayoutChild {
+  el: Element;
+  rect: DOMRect;
+}
+
+interface GapRegion {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  gapPx: number;
+  kind: 'row' | 'column';
 }
 
 /**
@@ -38,6 +52,10 @@ export class HighlightOverlay {
   private marginLabels: HTMLElement;
   private paddingLabels: HTMLElement;
 
+  // Flex/grid gap overlays and labels
+  private gapOverlays: HTMLElement;
+  private gapLabels: HTMLElement;
+
   // Container for outlines around every direct child of the current
   // element. Populated by `highlightChildren()` (driven by ArrowDown in
   // the inspector) and cleared on any other navigation or hover.
@@ -53,6 +71,8 @@ export class HighlightOverlay {
   private readonly PADDING_COLOR = 'rgba(120, 200, 140, 0.32)';
   private readonly MARGIN_LABEL_BG = 'rgba(230, 100, 80, 0.95)';
   private readonly PADDING_LABEL_BG = 'rgba(80, 160, 100, 0.95)';
+  private readonly GAP_COLOR = 'rgba(190, 165, 230, 0.38)';
+  private readonly GAP_LABEL_BG = 'rgba(130, 100, 190, 0.95)';
 
   constructor() {
     // Create shadow DOM host for style isolation
@@ -94,6 +114,12 @@ export class HighlightOverlay {
     this.paddingLabels = document.createElement('div');
     this.paddingLabels.className = 'box-labels padding-labels';
 
+    this.gapOverlays = document.createElement('div');
+    this.gapOverlays.className = 'gap-overlays';
+
+    this.gapLabels = document.createElement('div');
+    this.gapLabels.className = 'box-labels gap-labels';
+
     // Children outlines (filled by highlightChildren / cleared otherwise)
     this.childrenContainer = document.createElement('div');
     this.childrenContainer.className = 'children-outlines';
@@ -117,6 +143,8 @@ export class HighlightOverlay {
     this.shadow.appendChild(this.contentOverlay);
     this.shadow.appendChild(this.marginLabels);
     this.shadow.appendChild(this.paddingLabels);
+    this.shadow.appendChild(this.gapOverlays);
+    this.shadow.appendChild(this.gapLabels);
     this.shadow.appendChild(this.childrenContainer);
     this.shadow.appendChild(this.box);
     this.shadow.appendChild(this.frozenIndicator);
@@ -192,6 +220,34 @@ export class HighlightOverlay {
         background: ${this.PADDING_LABEL_BG};
       }
 
+      .gap-overlays {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+        pointer-events: none;
+        z-index: 2147483645;
+        display: none;
+      }
+
+      .gap-overlays.visible {
+        display: block;
+      }
+
+      .gap-layer {
+        position: fixed;
+        pointer-events: none;
+        background: ${this.GAP_COLOR};
+        box-sizing: border-box;
+      }
+
+      .gap-labels .box-label,
+      .box-label--gap {
+        background: ${this.GAP_LABEL_BG};
+      }
+
       @keyframes redline-shake {
         0%, 100% { transform: translateX(0); }
         20% { transform: translateX(-3px); }
@@ -202,7 +258,8 @@ export class HighlightOverlay {
 
       .redline-box.shake,
       .box-model-layer.shake,
-      .box-labels.shake {
+      .box-labels.shake,
+      .gap-overlays.shake {
         animation: redline-shake 0.3s ease-in-out;
       }
 
@@ -420,6 +477,8 @@ export class HighlightOverlay {
 
     // Update labels
     this.updateBoxModelLabels(element, rect, box);
+
+    this.showGapOverlay(element);
   }
 
   /**
@@ -657,6 +716,350 @@ export class HighlightOverlay {
     this.contentOverlay.style.display = 'none';
     this.marginLabels.style.display = 'none';
     this.paddingLabels.style.display = 'none';
+    this.hideGapOverlay();
+  }
+
+  /**
+   * Resolve the flex/grid container whose gaps should be drawn. Prefer the
+   * highlighted element when it is a gap container; otherwise use its parent.
+   */
+  private resolveGapContainer(element: Element): Element | null {
+    const computed = window.getComputedStyle(element);
+    if (this.isFlexOrGridDisplay(computed.display)) {
+      const rowGap = this.parseGap(computed.rowGap);
+      const colGap = this.parseGap(computed.columnGap);
+      if (rowGap > 0 || colGap > 0) return element;
+    }
+
+    const parent = element.parentElement;
+    if (!parent) return null;
+
+    const parentComputed = window.getComputedStyle(parent);
+    if (!this.isFlexOrGridDisplay(parentComputed.display)) return null;
+
+    const rowGap = this.parseGap(parentComputed.rowGap);
+    const colGap = this.parseGap(parentComputed.columnGap);
+    if (rowGap > 0 || colGap > 0) return parent;
+
+    return null;
+  }
+
+  private getVisibleLayoutChildren(container: Element): LayoutChild[] {
+    return Array.from(container.children)
+      .filter((el) => {
+        const style = window.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden') return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      })
+      .map((el) => ({ el, rect: el.getBoundingClientRect() }));
+  }
+
+  private approxMatchesGap(actual: number, expected: number): boolean {
+    if (expected <= 0 || actual <= 0) return false;
+    return Math.abs(actual - expected) <= Math.max(2, expected * 0.3);
+  }
+
+  private groupChildrenIntoRows(children: LayoutChild[], tolerance = 8): LayoutChild[][] {
+    if (children.length === 0) return [];
+
+    const sorted = [...children].sort((a, b) => a.rect.top - b.rect.top || a.rect.left - b.rect.left);
+    const rows: LayoutChild[][] = [[sorted[0]]];
+
+    for (let i = 1; i < sorted.length; i++) {
+      const child = sorted[i];
+      const lastRow = rows[rows.length - 1];
+      const rowTop = lastRow[0].rect.top;
+      if (Math.abs(child.rect.top - rowTop) <= tolerance) {
+        lastRow.push(child);
+      } else {
+        rows.push([child]);
+      }
+    }
+
+    return rows;
+  }
+
+  private pushColumnGapRegion(
+    regions: GapRegion[],
+    leftRect: DOMRect,
+    rightRect: DOMRect,
+    colGap: number,
+  ): void {
+    if (colGap <= 0) return;
+
+    const gapLeft = leftRect.right;
+    const gapRight = rightRect.left;
+    const gapWidth = gapRight - gapLeft;
+    if (!this.approxMatchesGap(gapWidth, colGap)) return;
+
+    const top = Math.max(leftRect.top, rightRect.top);
+    const bottom = Math.min(leftRect.bottom, rightRect.bottom);
+    if (bottom <= top) return;
+
+    regions.push({
+      left: gapLeft,
+      top,
+      width: gapWidth,
+      height: bottom - top,
+      gapPx: colGap,
+      kind: 'column',
+    });
+  }
+
+  private pushRowGapRegion(
+    regions: GapRegion[],
+    topRect: DOMRect,
+    bottomRect: DOMRect,
+    rowGap: number,
+    spanLeft: number,
+    spanRight: number,
+  ): void {
+    if (rowGap <= 0) return;
+
+    const gapTop = topRect.bottom;
+    const gapBottom = bottomRect.top;
+    const gapHeight = gapBottom - gapTop;
+    if (!this.approxMatchesGap(gapHeight, rowGap)) return;
+
+    const left = Math.max(spanLeft, Math.max(topRect.left, bottomRect.left));
+    const right = Math.min(spanRight, Math.min(topRect.right, bottomRect.right));
+    if (right <= left) {
+      regions.push({
+        left: spanLeft,
+        top: gapTop,
+        width: spanRight - spanLeft,
+        height: gapHeight,
+        gapPx: rowGap,
+        kind: 'row',
+      });
+      return;
+    }
+
+    regions.push({
+      left,
+      top: gapTop,
+      width: right - left,
+      height: gapHeight,
+      gapPx: rowGap,
+      kind: 'row',
+    });
+  }
+
+  private computeFlexGapRegions(
+    children: LayoutChild[],
+    computed: CSSStyleDeclaration,
+    rowGap: number,
+    colGap: number,
+  ): GapRegion[] {
+    const regions: GapRegion[] = [];
+    const direction = computed.flexDirection || 'row';
+    const isRow = direction.startsWith('row');
+    const isReverse = direction.includes('reverse');
+    const wrap = computed.flexWrap !== 'nowrap';
+
+    if (isRow) {
+      const rows = this.groupChildrenIntoRows(children);
+      for (const row of rows) {
+        const sorted = [...row].sort((a, b) =>
+          isReverse ? b.rect.right - a.rect.right : a.rect.left - b.rect.left,
+        );
+        for (let i = 0; i < sorted.length - 1; i++) {
+          this.pushColumnGapRegion(regions, sorted[i].rect, sorted[i + 1].rect, colGap);
+        }
+      }
+
+      if (wrap && rows.length > 1 && rowGap > 0) {
+        for (let i = 0; i < rows.length - 1; i++) {
+          const current = rows[i];
+          const next = rows[i + 1];
+          const topRect = current.reduce(
+            (best, child) => (child.rect.bottom > best.rect.bottom ? child : best),
+            current[0],
+          ).rect;
+          const bottomRect = next.reduce(
+            (best, child) => (child.rect.top < best.rect.top ? child : best),
+            next[0],
+          ).rect;
+          const spanLeft = Math.min(...current.map((c) => c.rect.left), ...next.map((c) => c.rect.left));
+          const spanRight = Math.max(...current.map((c) => c.rect.right), ...next.map((c) => c.rect.right));
+          this.pushRowGapRegion(regions, topRect, bottomRect, rowGap, spanLeft, spanRight);
+        }
+      }
+      return regions;
+    }
+
+    const columns = this.groupChildrenIntoColumns(children);
+    for (const column of columns) {
+      const sorted = [...column].sort((a, b) =>
+        isReverse ? b.rect.top - a.rect.top : a.rect.top - b.rect.top,
+      );
+      for (let i = 0; i < sorted.length - 1; i++) {
+        this.pushRowGapRegion(
+          regions,
+          sorted[i].rect,
+          sorted[i + 1].rect,
+          rowGap,
+          Math.min(sorted[i].rect.left, sorted[i + 1].rect.left),
+          Math.max(sorted[i].rect.right, sorted[i + 1].rect.right),
+        );
+      }
+    }
+
+    if (wrap && columns.length > 1 && colGap > 0) {
+      for (let i = 0; i < columns.length - 1; i++) {
+        const current = columns[i];
+        const next = columns[i + 1];
+        const leftRect = current.reduce(
+          (best, child) => (child.rect.right > best.rect.right ? child : best),
+          current[0],
+        ).rect;
+        const rightRect = next.reduce(
+          (best, child) => (child.rect.left < best.rect.left ? child : best),
+          next[0],
+        ).rect;
+        this.pushColumnGapRegion(regions, leftRect, rightRect, colGap);
+      }
+    }
+
+    return regions;
+  }
+
+  private groupChildrenIntoColumns(children: LayoutChild[], tolerance = 8): LayoutChild[][] {
+    if (children.length === 0) return [];
+
+    const sorted = [...children].sort((a, b) => a.rect.left - b.rect.left || a.rect.top - b.rect.top);
+    const columns: LayoutChild[][] = [[sorted[0]]];
+
+    for (let i = 1; i < sorted.length; i++) {
+      const child = sorted[i];
+      const lastColumn = columns[columns.length - 1];
+      const columnLeft = lastColumn[0].rect.left;
+      if (Math.abs(child.rect.left - columnLeft) <= tolerance) {
+        lastColumn.push(child);
+      } else {
+        columns.push([child]);
+      }
+    }
+
+    return columns;
+  }
+
+  private computeGridGapRegions(
+    children: LayoutChild[],
+    rowGap: number,
+    colGap: number,
+  ): GapRegion[] {
+    const regions: GapRegion[] = [];
+    const rows = this.groupChildrenIntoRows(children);
+
+    for (const row of rows) {
+      const sorted = [...row].sort((a, b) => a.rect.left - b.rect.left);
+      for (let i = 0; i < sorted.length - 1; i++) {
+        this.pushColumnGapRegion(regions, sorted[i].rect, sorted[i + 1].rect, colGap);
+      }
+    }
+
+    if (rows.length > 1 && rowGap > 0) {
+      for (let i = 0; i < rows.length - 1; i++) {
+        const current = rows[i];
+        const next = rows[i + 1];
+        const topRect = current.reduce(
+          (best, child) => (child.rect.bottom > best.rect.bottom ? child : best),
+          current[0],
+        ).rect;
+        const bottomRect = next.reduce(
+          (best, child) => (child.rect.top < best.rect.top ? child : best),
+          next[0],
+        ).rect;
+        const spanLeft = Math.min(...current.map((c) => c.rect.left), ...next.map((c) => c.rect.left));
+        const spanRight = Math.max(...current.map((c) => c.rect.right), ...next.map((c) => c.rect.right));
+        this.pushRowGapRegion(regions, topRect, bottomRect, rowGap, spanLeft, spanRight);
+      }
+    }
+
+    return regions;
+  }
+
+  private computeGapRegions(container: Element): GapRegion[] {
+    const computed = window.getComputedStyle(container);
+    if (!this.isFlexOrGridDisplay(computed.display)) return [];
+
+    const rowGap = this.parseGap(computed.rowGap);
+    const colGap = this.parseGap(computed.columnGap);
+    if (rowGap <= 0 && colGap <= 0) return [];
+
+    const children = this.getVisibleLayoutChildren(container);
+    if (children.length < 2) return [];
+
+    if (computed.display.includes('grid')) {
+      return this.computeGridGapRegions(children, rowGap, colGap);
+    }
+
+    return this.computeFlexGapRegions(children, computed, rowGap, colGap);
+  }
+
+  private formatGapLabel(container: Element, gapPx: number, kind: 'row' | 'column'): string {
+    const computed = window.getComputedStyle(container);
+    const raw =
+      kind === 'row'
+        ? computed.rowGap || computed.gap
+        : computed.columnGap || computed.gap;
+    const token =
+      extractDesignTokenName(raw) ??
+      extractDesignTokenName(computed.gap) ??
+      extractDesignTokenName(computed.rowGap) ??
+      extractDesignTokenName(computed.columnGap);
+    const rounded = Math.round(gapPx);
+    if (token) return `${token} (${rounded}px)`;
+    return `${rounded}`;
+  }
+
+  private showGapOverlay(element: Element): void {
+    const container = this.resolveGapContainer(element);
+    if (!container) {
+      this.hideGapOverlay();
+      return;
+    }
+
+    const regions = this.computeGapRegions(container);
+    if (regions.length === 0) {
+      this.hideGapOverlay();
+      return;
+    }
+
+    this.gapOverlays.innerHTML = '';
+    this.gapLabels.innerHTML = '';
+
+    for (const region of regions) {
+      const overlay = document.createElement('div');
+      overlay.className = 'gap-layer';
+      overlay.style.top = `${region.top}px`;
+      overlay.style.left = `${region.left}px`;
+      overlay.style.width = `${region.width}px`;
+      overlay.style.height = `${region.height}px`;
+      this.gapOverlays.appendChild(overlay);
+
+      const label = document.createElement('span');
+      label.className = 'box-label box-label--gap';
+      label.style.background = this.GAP_LABEL_BG;
+      label.style.color = '#fff';
+      label.textContent = this.formatGapLabel(container, region.gapPx, region.kind);
+      label.style.left = `${region.left + region.width / 2}px`;
+      label.style.top = `${region.top + region.height / 2}px`;
+      this.gapLabels.appendChild(label);
+      this.clampBoxModelLabelToViewport(label);
+    }
+
+    this.gapOverlays.classList.add('visible');
+    this.gapLabels.style.display = 'block';
+  }
+
+  private hideGapOverlay(): void {
+    this.gapOverlays.innerHTML = '';
+    this.gapOverlays.classList.remove('visible');
+    this.gapLabels.innerHTML = '';
+    this.gapLabels.style.display = 'none';
   }
 
   /**
@@ -851,6 +1254,8 @@ export class HighlightOverlay {
       this.paddingOverlay,
       this.marginLabels,
       this.paddingLabels,
+      this.gapOverlays,
+      this.gapLabels,
     ];
 
     elements.forEach((el) => {
