@@ -30,7 +30,8 @@ main {
     padding-bottom: 40px;
 }
 
-.app-logo {
+.app-logo,
+.app-icon {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -76,6 +77,12 @@ h1 {
 }
 
 .download:hover { opacity: 0.9; }
+
+.meta {
+    margin-top: 18px;
+    font-size: 13px;
+    color: var(--muted);
+}
 
 .demo-section {
     margin-bottom: 96px;
