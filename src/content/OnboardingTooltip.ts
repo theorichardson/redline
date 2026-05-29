@@ -633,7 +633,7 @@ export class OnboardingTooltip {
             </li>
             <li class="rl-onb-check-item" data-key="usedDown">
               <span class="rl-onb-check-circle">${checkIcon}</span>
-              <span class="rl-onb-check-label">Press <kbd>↓</kbd> to drill into child layers</span>
+              <span class="rl-onb-check-label">Press <kbd>↓</kbd> to select the inner layer</span>
             </li>
             <li class="rl-onb-check-item" data-key="usedUp">
               <span class="rl-onb-check-circle">${checkIcon}</span>

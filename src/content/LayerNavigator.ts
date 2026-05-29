@@ -101,43 +101,69 @@ export class LayerNavigator {
    * Filters out our own UI elements and hidden elements
    */
   updateAtPoint(x: number, y: number): void {
-
-    // Get all elements at this point, from topmost to bottommost
     const elements = document.elementsFromPoint(x, y);
+    this.elementStack = elements.filter((el) => this.isStackCandidate(el));
+    this.selectInnermostLayer();
+  }
 
-    // Filter out Redline UI elements, html/body, and hidden elements
-    this.elementStack = elements.filter((el) => {
-      // Skip our own UI (any element with data-redline-* attributes)
-      if (
-        el.hasAttribute('data-redline-overlay') ||
-        el.hasAttribute('data-redline-panel') ||
-        el.hasAttribute('data-redline-ui') ||
-        el.hasAttribute('data-redline-badges')
-      ) {
-        return false;
-      }
-      if (
-        el.closest('[data-redline-overlay]') ||
-        el.closest('[data-redline-panel]') ||
-        el.closest('[data-redline-ui]') ||
-        el.closest('[data-redline-badges]')
-      ) {
-        return false;
-      }
-      // Skip html and body (rarely useful to inspect)
-      if (el.tagName === 'HTML' || el.tagName === 'BODY') {
-        return false;
-      }
-      // Skip elements that are not visually visible
-      if (!this.isElementVisible(el)) {
-        return false;
-      }
-      return true;
-    });
-
-    // Reset to topmost element
+  /**
+   * Select the topmost (innermost) layer at the current cursor stack.
+   * Called on every hover so mousemove always targets the deepest content;
+   * use arrow keys to walk up toward parents.
+   */
+  private selectInnermostLayer(): void {
     this.currentIndex = 0;
     this.currentElement = this.elementStack[0] ?? null;
+  }
+
+  private isStackCandidate(el: Element): boolean {
+    if (
+      el.hasAttribute('data-redline-overlay') ||
+      el.hasAttribute('data-redline-panel') ||
+      el.hasAttribute('data-redline-ui') ||
+      el.hasAttribute('data-redline-badges')
+    ) {
+      return false;
+    }
+    if (
+      el.closest('[data-redline-overlay]') ||
+      el.closest('[data-redline-panel]') ||
+      el.closest('[data-redline-ui]') ||
+      el.closest('[data-redline-badges]')
+    ) {
+      return false;
+    }
+    if (el.tagName === 'HTML' || el.tagName === 'BODY') {
+      return false;
+    }
+    if (!this.isElementVisible(el)) {
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Move toward the outer/parent layer in the z-order stack at the cursor.
+   */
+  navigateStackTowardRoot(): Element | null {
+    if (this.currentIndex >= this.elementStack.length - 1) {
+      return this.currentElement;
+    }
+    this.currentIndex += 1;
+    this.currentElement = this.elementStack[this.currentIndex] ?? null;
+    return this.currentElement;
+  }
+
+  /**
+   * Move toward the inner/child layer in the z-order stack at the cursor.
+   */
+  navigateStackTowardLeaf(): Element | null {
+    if (this.currentIndex <= 0) {
+      return this.currentElement;
+    }
+    this.currentIndex -= 1;
+    this.currentElement = this.elementStack[this.currentIndex] ?? null;
+    return this.currentElement;
   }
 
   /**
@@ -230,8 +256,9 @@ export class LayerNavigator {
   jumpTo(index: number): Element | null {
     if (index >= 0 && index < this.elementStack.length) {
       this.currentIndex = index;
+      this.currentElement = this.elementStack[index] ?? null;
     }
-    return this.getCurrentElement();
+    return this.currentElement;
   }
 
   /**
