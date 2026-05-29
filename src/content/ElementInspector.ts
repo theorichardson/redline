@@ -163,8 +163,11 @@ export class ElementInspector {
       return;
     }
 
-    this.layerNavigator.updateAtPoint(e.clientX, e.clientY);
-    const element = this.layerNavigator.getCurrentElement();
+    // Use the element selected by hover and/or arrow-key navigation.
+    // Do not call updateAtPoint here — it resets the navigator to the
+    // topmost element at the cursor and would undo ArrowUp/Down/Left/Right.
+    const element =
+      this.currentElement ?? this.layerNavigator.getCurrentElement();
     if (!element) return;
 
     const name = formatElementDisplayName(element);
