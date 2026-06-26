@@ -1,8 +1,9 @@
 import { extractDesignTokenName, formatBoxModelLabel } from './boxModelTokenLabel';
 import {
   buildBoxModelLabelSpecs,
-  computeBoxModelLabelAnchor,
-  computeGapLabelAnchor,
+  boxModelBandRect,
+  gapBandRect,
+  gapPreferredSide,
   collectRedlineUiObstacleRects,
   mountAndLayoutOverlayLabels,
   type BoxModelGeometry,
@@ -527,11 +528,12 @@ export class HighlightOverlay {
 
     const marginSpecs = buildBoxModelLabelSpecs('margin', box.margin);
     if (marginSpecs.length > 0) {
+      const band = boxModelBandRect('margin', geo);
       batches.push({
         container: this.marginLabels,
         entries: marginSpecs.map((spec) => ({
           el: this.createBoxModelLabel(element, spec.boxType, spec.side, spec.pxValue),
-          anchor: computeBoxModelLabelAnchor(spec.boxType, spec.side, geo, obstacles),
+          band,
           side: spec.side,
         })),
       });
@@ -539,17 +541,18 @@ export class HighlightOverlay {
 
     const paddingSpecs = buildBoxModelLabelSpecs('padding', box.padding);
     if (paddingSpecs.length > 0) {
+      const band = boxModelBandRect('padding', geo);
       batches.push({
         container: this.paddingLabels,
         entries: paddingSpecs.map((spec) => ({
           el: this.createBoxModelLabel(element, spec.boxType, spec.side, spec.pxValue),
-          anchor: computeBoxModelLabelAnchor(spec.boxType, spec.side, geo, obstacles),
+          band,
           side: spec.side,
         })),
       });
     }
 
-    const gapBatch = this.buildGapLabelBatch(element, obstacles);
+    const gapBatch = this.buildGapLabelBatch(element);
     if (gapBatch) batches.push(gapBatch);
 
     mountAndLayoutOverlayLabels(batches, obstacles, targetRect);
@@ -885,7 +888,7 @@ export class HighlightOverlay {
     return `${rounded}`;
   }
 
-  private buildGapLabelBatch(element: Element, obstacles: DOMRect[]): LabelMountBatch | null {
+  private buildGapLabelBatch(element: Element): LabelMountBatch | null {
     const container = this.resolveGapContainer(element);
     if (!container) return null;
 
@@ -893,13 +896,12 @@ export class HighlightOverlay {
     if (regions.length === 0) return null;
 
     const entries = regions.map((region) => {
-      const anchor = computeGapLabelAnchor(region, obstacles);
       const label = document.createElement('span');
       label.className = 'box-label box-label--gap';
       label.style.background = this.GAP_LABEL_BG;
       label.style.color = '#fff';
       label.textContent = this.formatGapLabel(container, region.gapPx, region.kind);
-      return { el: label, anchor, side: anchor.side };
+      return { el: label, band: gapBandRect(region), side: gapPreferredSide(region) };
     });
 
     return { container: this.gapLabels, entries };
