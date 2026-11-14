@@ -15,10 +15,11 @@ import {
 } from './OnboardingTooltip';
 import type { Message } from '../shared/types';
 
-// Idempotency guard: the content script can be injected more than once on the
-// same page (manifest auto-inject + chrome.scripting.executeScript fallback
-// from the background/popup). Re-running the entry would mount a second
-// floating button. A DOM sentinel works across isolated-world re-runs.
+// Idempotency guard: the popup and the shortcut can both call
+// chrome.scripting.executeScript on the same page. Re-running the entry
+// would mount a second floating button. A DOM sentinel works across
+// isolated-world re-runs. There is no manifest content script; this file
+// runs only after the user invokes Redline on this tab.
 const SENTINEL_ID = 'redline-content-script-loaded';
 if (document.getElementById(SENTINEL_ID)) {
   // Another instance already initialized on this page. Bail out.
@@ -62,17 +63,6 @@ function persistActiveState(isActive: boolean): void {
   if (lastPersistedActive === isActive) return;
   lastPersistedActive = isActive;
   void chrome.storage.local.set({ redlineIsActive: isActive });
-}
-
-async function restoreActiveState(): Promise<void> {
-  const result = await chrome.storage.local.get({ redlineIsActive: false });
-  const active = result.redlineIsActive === true;
-
-  lastPersistedActive = active;
-  if (active && !inspector.getIsActive()) {
-    inspector.activate();
-    syncButtonStates();
-  }
 }
 
 // Onboarding overlay (anchored above the FAB). Always instantiate so it can
@@ -123,8 +113,11 @@ const FAB_COLLAPSED_KEY = 'redline-floating-button-collapsed';
 
 floatingButton.mount();
 
-// Hydrate onboarding state from storage on every page load.
-void chrome.storage.local
+// Hydrate onboarding before handling an invocation. The shortcut and the
+// popup inject this script and then send TOGGLE_INSPECTION. Waiting here
+// lets step 1 advance to step 2 on that same activation, instead of leaving
+// the "click the button" prompt up after inspection is already on.
+const onboardingReady = chrome.storage.local
   .get({
     [ONBOARDING_STORAGE_KEY]: 0,
     [ONBOARDING_STEP2_PROGRESS_KEY]: EMPTY_STEP2_PROGRESS,
@@ -142,6 +135,9 @@ void chrome.storage.local
     // already sees the correct hydration state.
     onboarding.applyStep2Progress(progress);
     onboarding.applyStep(step);
+  })
+  .catch((err) => {
+    console.error('[Redline] Onboarding hydrate failed:', err);
   });
 
 function normalizeStep2Progress(raw: unknown): Step2Progress {
@@ -160,17 +156,10 @@ void chrome.storage.local.get({ [FAB_HIDDEN_KEY]: false }).then((result) => {
   const hidden = result[FAB_HIDDEN_KEY] === true;
   if (hidden) {
     floatingButton.hide();
-    // If the tab is hidden, inspector shouldn't be active either
-    if (inspector.getIsActive()) {
-      inspector.deactivate();
-      syncButtonStates();
-    }
   } else {
     floatingButton.show();
   }
 });
-
-restoreActiveState();
 
 // Sync inspector state across tabs/contexts
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -252,9 +241,16 @@ function handleShortcutToggle(): void {
 chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) => {
   switch (message.type) {
     case 'TOGGLE_INSPECTION': {
-      handleShortcutToggle();
-      sendResponse({ success: true });
-      return;
+      void Promise.all([onboardingReady, floatingButton.whenReady()])
+        .catch((err) => {
+          console.error('[Redline] Inspector invoke failed to hydrate:', err);
+        })
+        .then(() => {
+          handleShortcutToggle();
+          sendResponse({ success: true });
+        });
+      // Keep the message channel open until onboarding hydration finishes.
+      return true;
     }
 
     case 'GET_STATE':
@@ -283,7 +279,9 @@ document.addEventListener(
     if (!isToggleShortcut(e)) return;
     e.preventDefault();
     e.stopPropagation();
-    handleShortcutToggle();
+    void Promise.all([onboardingReady, floatingButton.whenReady()]).then(() => {
+      handleShortcutToggle();
+    });
   },
   true,
 );

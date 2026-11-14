@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Redline",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "description": "Visual alignment rulers and layer navigation while you inspect layouts.",
   "icons": {
     "16": "icons/icon16.png",
@@ -14,16 +14,10 @@
     "storage",
     "scripting"
   ],
-  "host_permissions": ["http://*/*", "https://*/*"],
   "background": {
     "service_worker": "background.js",
     "type": "module"
   },
-  "content_scripts": [{
-    "matches": ["http://*/*", "https://*/*"],
-    "js": ["content.js"],
-    "run_at": "document_idle"
-  }],
   "action": {
     "default_popup": "popup.html",
     "default_title": "Redline",

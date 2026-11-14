@@ -17,6 +17,7 @@ export class FloatingButton {
   private buttonsContainer: HTMLElement | null = null;
   private callbacks: FloatingButtonCallbacks;
   private isCollapsed: boolean = false;
+  private ready: Promise<void> = Promise.resolve();
   private static readonly STORAGE_KEY = 'redline-floating-button-collapsed';
   private static readonly STORAGE_POSITION_KEY = 'redline-floating-button-position';
   private isDragging: boolean = false;
@@ -86,7 +87,7 @@ export class FloatingButton {
     this.container!.style.display = 'none';
     document.body.appendChild(this.container!);
 
-    void Promise.all([this.loadCollapseState(), this.loadPosition()]).then(() => {
+    this.ready = Promise.all([this.loadCollapseState(), this.loadPosition()]).then(() => {
       // Wait two frames so the browser commits the loaded styles without
       // transitioning, then re-enable transitions for subsequent interactions.
       requestAnimationFrame(() => {
@@ -95,6 +96,15 @@ export class FloatingButton {
         });
       });
     });
+  }
+
+  /**
+   * Resolves once persisted position and collapse state have been applied.
+   * Invocation (shortcut or popup) can arrive in the same turn as injection,
+   * so callers should wait before reading collapse state.
+   */
+  whenReady(): Promise<void> {
+    return this.ready;
   }
 
   /**

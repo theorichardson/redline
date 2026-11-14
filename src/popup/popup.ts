@@ -60,26 +60,38 @@ tabToggleRow?.addEventListener('keydown', (e) => {
 });
 
 /**
- * Ensure content script is loaded and toggle inspection
+ * Inject the inspector into the tab the popup was opened on, then toggle it.
+ * Opening the popup grants activeTab for that tab only, so scripting can
+ * reach it without an all-sites host permission.
  */
 async function activateInspector(tabId: number): Promise<void> {
   try {
-    // Try to send message first
     await chrome.tabs.sendMessage(tabId, { type: 'TOGGLE_INSPECTION' });
+    return;
   } catch {
-    // Content script not loaded, inject it first
+    // Content script is not on this tab yet.
+  }
+
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['content.js'],
+    });
+  } catch (err) {
+    console.error('[Redline Popup] Failed to inject:', err);
+    return;
+  }
+
+  for (let attempt = 0; attempt < 8; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 40));
     try {
-      await chrome.scripting.executeScript({
-        target: { tabId },
-        files: ['content.js'],
-      });
-      // Wait for script to initialize, then send message
-      await new Promise((resolve) => setTimeout(resolve, 100));
       await chrome.tabs.sendMessage(tabId, { type: 'TOGGLE_INSPECTION' });
-    } catch (err) {
-      console.error('[Redline Popup] Failed to inject:', err);
+      return;
+    } catch {
+      /* content script still booting */
     }
   }
+  console.error('[Redline Popup] Toggle message failed after injection');
 }
 
 // Check current state (deferred so we don't block the popup paint waiting

@@ -4,7 +4,11 @@
  */
 
 /**
- * Ensure content script is injected and send toggle message
+ * Inject the inspector into the invoked tab and toggle it.
+ *
+ * activeTab (granted by the keyboard shortcut, or by clicking the toolbar
+ * action) plus the scripting permission is enough to run here. There is no
+ * all-sites host permission, so this cannot reach any other tab.
  */
 async function toggleInspection(tabId: number): Promise<void> {
   try {
@@ -55,32 +59,10 @@ chrome.action.onClicked.addListener((tab) => {
 });
 
 /**
- * Inject content.js into every existing http(s) tab. Used on install/update
- * so the floating bar appears immediately without requiring a page refresh.
- * The content script's own DOM sentinel guards against double-mounting.
- */
-async function injectIntoAllTabs(): Promise<void> {
-  const tabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] });
-  await Promise.all(
-    tabs.map(async (tab) => {
-      if (!tab.id) return;
-      try {
-        await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          files: ['content.js'],
-        });
-      } catch {
-        // Some pages (chrome web store, view-source:, etc.) reject injection.
-        // Silently skip — they're out of scope for this extension anyway.
-      }
-    }),
-  );
-}
-
-/**
  * Decide whether this install/update should trigger the FTUX onboarding tour.
- * The tour writes a single integer to chrome.storage.local; the content script
- * picks it up on every open tab and renders the tooltip above the floating
+ * The tour writes a single integer to chrome.storage.local. The inspector is
+ * injected only into the tab the user invokes (toolbar or shortcut); that
+ * content script reads the step and renders the tooltip above the floating
  * bar. Step 3 of the tour itself prompts the user to bind a keyboard shortcut,
  * so we no longer auto-redirect to chrome://extensions/shortcuts on install.
  */
@@ -126,8 +108,6 @@ async function startOnboarding(): Promise<void> {
 }
 
 chrome.runtime.onInstalled.addListener((details) => {
-  void injectIntoAllTabs();
-
   if (details.reason === 'install') {
     void startOnboarding();
     return;

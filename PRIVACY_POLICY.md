@@ -1,6 +1,6 @@
 # Privacy Policy for Redline
 
-_Last updated: 2026-05-02_
+_Last updated: 2026-11-14_
 
 Redline is a developer tool that helps you inspect and debug the layout of web pages you visit. This policy describes what Redline does and does not do with your data.
 
@@ -12,7 +12,7 @@ Redline is a developer tool that helps you inspect and debug the layout of web p
 
 ## What Redline accesses
 
-Redline loads a small floating button on pages you visit so you can turn the inspector on and off. It only reads information from a page when you actively use the inspector on that page:
+When you start Redline on a tab — from the toolbar or a keyboard shortcut — it loads a small floating button on that tab so you can turn the inspector on and off. It only reads information from that page while you use the inspector:
 
 - Computed CSS styles and bounding boxes of elements you hover or click.
 - DOM structure around the inspected element, used to draw alignment guides and rulers.
@@ -30,9 +30,9 @@ This data never leaves your browser.
 
 ## Permissions
 
-- `activeTab` and host permissions for `http://*/*` and `https://*/*`: required so the inspector can read layout information from the page you are currently viewing.
+- `activeTab`: temporary access to the tab you are viewing when you click the Redline icon or use its keyboard shortcut, so the inspector can read layout information on that tab. Redline does not request access to all websites. A compromised update can only run on the tab where you invoked it, and that access ends when you navigate away.
 - `storage`: stores the small UI preferences described above.
-- `scripting`: allows the inspector to be injected into the active tab on demand.
+- `scripting`: injects the inspector into that tab on demand.
 
 Redline does not use these permissions for any purpose other than the features described above.
 

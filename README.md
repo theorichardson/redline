@@ -9,7 +9,7 @@ A Chrome extension for debugging web layout issues. Redline gives you DOM layer 
 - Inspect any element on a page and see its computed styles and box model.
 - Visualize padding, margin, and alignment relative to neighboring elements.
 - Toggle on-page rulers to measure distances and check alignment.
-- Floating button you can drag, collapse, and reposition.
+- Floating button you can drag, collapse, and reposition on the tab where you started Redline.
 
 ## Keyboard shortcuts
 
@@ -37,6 +37,8 @@ Redline runs entirely locally. It does not transmit any data to remote servers a
 
 ## Permissions
 
-- `activeTab` + `http(s)://*/*` host access — read layout info from the active page.
+Redline does not request access to every website. It runs only on the tab you invoke it on.
+
+- `activeTab` — temporary access to the tab you're viewing when you click the toolbar icon or use a keyboard shortcut. Access ends when you leave that page.
+- `scripting` — inject the inspector into that tab.
 - `storage` — remember the floating button's position and a few UI preferences.
-- `scripting` — inject the inspector into the active tab on demand.
